@@ -447,6 +447,181 @@ pam_tally2 --user=username --reset
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for user management developers.
+
+### PAM Integration
+
+OpenBMC uses PAM (Pluggable Authentication Modules) for authentication:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    PAM Authentication Flow                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Login Request (Redfish/IPMI/SSH)                                      │
+│          │                                                              │
+│          ▼                                                              │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    PAM Stack                                    │   │
+│   │   /etc/pam.d/common-auth                                        │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│          ┌─────────────────────┼─────────────────────┐                  │
+│          │                     │                     │                  │
+│          ▼                     ▼                     ▼                  │
+│   ┌────────────┐        ┌────────────┐        ┌────────────┐            │
+│   │ pam_unix   │        │ pam_ldap   │        │ pam_radius │            │
+│   │ (local)    │        │ (LDAP/AD)  │        │ (RADIUS)   │            │
+│   └─────┬──────┘        └─────┬──────┘        └─────┬──────┘            │
+│         │                     │                     │                   │
+│         ▼                     ▼                     ▼                   │
+│   /etc/shadow           LDAP Server           RADIUS Server             │
+│                                                                         │
+│   PAM Configuration (/etc/pam.d/common-auth):                           │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ auth sufficient pam_unix.so nullok try_first_pass               │   │
+│   │ auth sufficient pam_ldap.so use_first_pass                      │   │
+│   │ auth required   pam_deny.so                                     │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**PAM module flow:**
+- `sufficient`: If module succeeds, skip remaining; if fails, continue
+- `required`: Must pass, but continue checking other modules
+- `requisite`: Must pass, fail immediately if not
+
+### LDAP Authentication Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    LDAP Authentication Sequence                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   BMC (phosphor-user-manager)              LDAP Server                  │
+│          │                                      │                       │
+│          │  1. Bind (service account)           │                       │
+│          │─────────────────────────────────────▶│                       │
+│          │◀─────────────────────────────────────│ Bind success          │
+│          │                                      │                       │
+│          │  2. Search (find user DN)            │                       │
+│          │  filter: (uid=username)              │                       │
+│          │─────────────────────────────────────▶│                       │
+│          │◀─────────────────────────────────────│ User DN returned      │
+│          │                                      │                       │
+│          │  3. Bind (user DN + password)        │                       │
+│          │─────────────────────────────────────▶│                       │
+│          │◀─────────────────────────────────────│ Auth success/fail     │
+│          │                                      │                       │
+│          │  4. Search (get group membership)    │                       │
+│          │  filter: (member=userDN)             │                       │
+│          │─────────────────────────────────────▶│                       │
+│          │◀─────────────────────────────────────│ Group list            │
+│          │                                      │                       │
+│                                                                         │
+│   Group to Privilege Mapping:                                           │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ LDAP Group          │ OpenBMC Role      │ IPMI Privilege        │   │
+│   ├─────────────────────┼───────────────────┼───────────────────────┤   │
+│   │ cn=bmc-admins       │ Administrator     │ 4 (Administrator)     │   │
+│   │ cn=bmc-operators    │ Operator          │ 3 (Operator)          │   │
+│   │ cn=bmc-users        │ User              │ 2 (User)              │   │
+│   │ cn=bmc-readonly     │ ReadOnly          │ 1 (Callback)          │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Password Hashing
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Password Storage                                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   /etc/shadow format:                                                   │
+│   username:$6$salt$hash:lastchange:min:max:warn:inactive:expire:        │
+│                                                                         │
+│   Hash Types:                                                           │
+│   ├── $1$ = MD5 (deprecated, insecure)                                  │
+│   ├── $5$ = SHA-256                                                     │
+│   └── $6$ = SHA-512 (default, recommended)                              │
+│                                                                         │
+│   Password Change Flow:                                                 │
+│   ┌──────────────────────────────────────────────────────────────────┐  │
+│   │ 1. Redfish PATCH /AccountService/Accounts/{id}                   │  │
+│   │    { "Password": "newPassword" }                                 │  │
+│   │                                                                  │  │
+│   │ 2. bmcweb calls D-Bus:                                           │  │
+│   │    xyz.openbmc_project.User.Manager.RenameUser() or              │  │
+│   │    org.freedesktop.Accounts.User.SetPassword()                   │  │
+│   │                                                                  │  │
+│   │ 3. phosphor-user-manager:                                        │  │
+│   │    - Validates password policy (length, complexity)              │  │
+│   │    - Calls pam_chauthtok() to update /etc/shadow                 │  │
+│   │    - Emits PropertiesChanged signal                              │  │
+│   └──────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### D-Bus Permission Enforcement
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    D-Bus Access Control                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   /etc/dbus-1/system.d/ policy files control D-Bus access:              │
+│                                                                         │
+│   Example: phosphor-user-manager.conf                                   │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ <policy user="root">                                            │   │
+│   │   <allow own="xyz.openbmc_project.User.Manager"/>               │   │
+│   │   <allow send_destination="xyz.openbmc_project.User.Manager"/>  │   │
+│   │ </policy>                                                       │   │
+│   │                                                                 │   │
+│   │ <policy context="default">                                      │   │
+│   │   <deny send_destination="xyz.openbmc_project.User.Manager"     │   │
+│   │         send_interface="xyz.openbmc_project.User.Manager"/>     │   │
+│   │   <allow send_destination="xyz.openbmc_project.User.Manager"    │   │
+│   │         send_interface="org.freedesktop.DBus.Properties"        │   │
+│   │         send_member="Get"/>                                     │   │
+│   │ </policy>                                                       │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Privilege Enforcement in bmcweb:                                      │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ // Route with privilege requirement                             │   │
+│   │ BMCWEB_ROUTE(app, "/redfish/v1/AccountService/Accounts/<str>/") │   │
+│   │     .privileges(redfish::privileges::patchAccount)              │   │
+│   │     .methods(boost::beast::http::verb::patch)(handlePatch);     │   │
+│   │                                                                 │   │
+│   │ // privileges::patchAccount requires ConfigureUsers             │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files in [phosphor-user-manager](https://github.com/openbmc/phosphor-user-manager):
+
+| File | Description |
+|------|-------------|
+| `user_mgr.cpp` | Main user manager implementation |
+| `users.cpp` | Individual user object handling |
+| `ldap_config.cpp` | LDAP configuration management |
+| `ldap_mapper.cpp` | LDAP group to privilege mapping |
+| `shadowlock.cpp` | /etc/shadow file locking |
+| `phosphor-ldap-conf.cpp` | LDAP config daemon |
+
+---
+
 ## References
 
 - [phosphor-user-manager](https://github.com/openbmc/phosphor-user-manager)

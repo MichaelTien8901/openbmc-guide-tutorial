@@ -467,6 +467,201 @@ lamp_test:
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for LED management developers.
+
+### LED Blinking Algorithm
+
+The LED manager implements software-controlled blinking for LEDs:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Blink Pattern Implementation                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Blink Parameters:                                                     │
+│   ├── Period: Total cycle time (e.g., 1000ms)                           │
+│   └── DutyOn: Percentage of period LED is on (e.g., 50%)                │
+│                                                                         │
+│   Example: Period=1000ms, DutyOn=50%                                    │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                                                                 │   │
+│   │   LED State                                                     │   │
+│   │      ON  ─┐     ┌─────┐     ┌─────┐     ┌─────┐                 │   │
+│   │           │     │     │     │     │     │     │                 │   │
+│   │     OFF  ─┴─────┴─────┴─────┴─────┴─────┴─────┴─────────        │   │
+│   │           │←  500ms  →│←  500ms  →│                             │   │
+│   │           │←─────── 1000ms ──────→│                             │   │
+│   │                                                                 │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Implementation (timer-based):                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ onTime = period * dutyOn / 100;                                 │   │
+│   │ offTime = period - onTime;                                      │   │
+│   │                                                                 │   │
+│   │ while (blinking) {                                              │   │
+│   │     setLED(ON);                                                 │   │
+│   │     sleep(onTime);                                              │   │
+│   │     setLED(OFF);                                                │   │
+│   │     sleep(offTime);                                             │   │
+│   │ }                                                               │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Action Types:                                                         │
+│   ├── On: LED constantly on (DutyOn=100, Period=0)                      │
+│   ├── Off: LED constantly off                                           │
+│   └── Blink: LED cycles per DutyOn/Period                               │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### LED Group Priority Resolution
+
+When multiple LED groups request different states, priority determines outcome:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    LED Group Priority                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Priority Levels (higher = more important):                            │
+│   ┌────────┬─────────────────────┬───────────────────────────────────┐  │
+│   │Priority│ Group               │ Description                       │  │
+│   ├────────┼─────────────────────┼───────────────────────────────────┤  │
+│   │   1    │ lamp_test           │ Override for manufacturing test   │  │
+│   │   2    │ fault               │ Hardware fault indication         │  │
+│   │   3    │ enclosure_identify  │ Chassis locate request            │  │
+│   │   4    │ power               │ System power state                │  │
+│   │   5    │ bmc_booted          │ BMC ready indication              │  │
+│   └────────┴─────────────────────┴───────────────────────────────────┘  │
+│                                                                         │
+│   Resolution Example:                                                   │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ LED: "identify" (front panel blue LED)                          │   │
+│   │                                                                 │   │
+│   │ Group Requests:                                                 │   │
+│   │ ├── bmc_booted:        Blink (Priority 5)                       │   │
+│   │ ├── power:             On (Priority 4)                          │   │
+│   │ └── enclosure_identify: Blink-fast (Priority 3)                 │   │
+│   │                                                                 │   │
+│   │ Resolution: enclosure_identify wins → LED blinks fast           │   │
+│   │                                                                 │   │
+│   │ If enclosure_identify deactivated:                              │   │
+│   │ → power group now wins → LED on                                 │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   D-Bus Group Interface:                                                │
+│   /xyz/openbmc_project/led/groups/<group-name>                          │
+│   └── Asserted (bool) - Group active state                              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Sysfs LED Interface
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Kernel LED Sysfs Interface                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   /sys/class/leds/<led-name>/                                           │
+│   ├── brightness        # 0=off, max_brightness=full on                 │
+│   ├── max_brightness    # Maximum brightness value (often 255)          │
+│   ├── trigger           # Current trigger (none, timer, heartbeat)      │
+│   ├── delay_on          # On time in ms (when trigger=timer)            │
+│   └── delay_off         # Off time in ms (when trigger=timer)           │
+│                                                                         │
+│   phosphor-led-sysfs Mapping:                                           │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                                                                 │   │
+│   │   D-Bus Action         Sysfs Operations                         │   │
+│   │   ─────────────        ────────────────                         │   │
+│   │   Action=On         →  echo max > brightness                    │   │
+│   │                        echo none > trigger                      │   │
+│   │                                                                 │   │
+│   │   Action=Off        →  echo 0 > brightness                      │   │
+│   │                        echo none > trigger                      │   │
+│   │                                                                 │   │
+│   │   Action=Blink      →  echo timer > trigger                     │   │
+│   │                        echo <on_ms> > delay_on                  │   │
+│   │                        echo <off_ms> > delay_off                │   │
+│   │                                                                 │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Device Tree LED Definition:                                           │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ leds {                                                          │   │
+│   │     compatible = "gpio-leds";                                   │   │
+│   │                                                                 │   │
+│   │     identify {                                                  │   │
+│   │         gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;                   │   │
+│   │         default-state = "off";                                  │   │
+│   │     };                                                          │   │
+│   │                                                                 │   │
+│   │     fault {                                                     │   │
+│   │         gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;                    │   │
+│   │         default-state = "off";                                  │   │
+│   │     };                                                          │   │
+│   │ };                                                              │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### LED Configuration YAML
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    LED Group Configuration                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   /usr/share/phosphor-led-manager/led.yaml:                             │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ bmc_booted:                                                     │   │
+│   │     heartbeat:                                                  │   │
+│   │         Action: 'Blink'                                         │   │
+│   │         DutyOn: 50                                              │   │
+│   │         Period: 1000                                            │   │
+│   │         Priority: 'Blink'                                       │   │
+│   │                                                                 │   │
+│   │ enclosure_identify:                                             │   │
+│   │     identify:                                                   │   │
+│   │         Action: 'Blink'                                         │   │
+│   │         DutyOn: 50                                              │   │
+│   │         Period: 500                                             │   │
+│   │         Priority: 'Blink'                                       │   │
+│   │                                                                 │   │
+│   │ power_on:                                                       │   │
+│   │     power:                                                      │   │
+│   │         Action: 'On'                                            │   │
+│   │         DutyOn: 100                                             │   │
+│   │         Period: 0                                               │   │
+│   │         Priority: 'On'                                          │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Generated Code (meson build):                                         │
+│   YAML → C++ constexpr arrays (led-gen.hpp)                             │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files in [phosphor-led-manager](https://github.com/openbmc/phosphor-led-manager):
+
+| File | Description |
+|------|-------------|
+| `manager.cpp` | LED group state management |
+| `group.cpp` | Individual group handling |
+| `serialize.cpp` | State persistence |
+| `lamptest.cpp` | Lamp test implementation |
+| `json-parser.cpp` | JSON config parsing |
+
+---
+
 ## References
 
 - [phosphor-led-manager](https://github.com/openbmc/phosphor-led-manager)

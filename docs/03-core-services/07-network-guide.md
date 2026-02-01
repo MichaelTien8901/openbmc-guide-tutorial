@@ -478,6 +478,194 @@ DNS=8.8.8.8
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for network configuration developers.
+
+### systemd-networkd Integration
+
+phosphor-networkd translates D-Bus calls to systemd-networkd configuration:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Network Configuration Flow                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Redfish/D-Bus Request                                                 │
+│          │                                                              │
+│          ▼                                                              │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    phosphor-networkd                            │   │
+│   │   xyz.openbmc_project.Network                                   │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │               /etc/systemd/network/*.network                    │   │
+│   │                                                                 │   │
+│   │   [Match]                                                       │   │
+│   │   Name=eth0                                                     │   │
+│   │                                                                 │   │
+│   │   [Network]                                                     │   │
+│   │   Address=192.168.1.100/24                                      │   │
+│   │   Gateway=192.168.1.1                                           │   │
+│   │   DNS=8.8.8.8                                                   │   │
+│   │   DHCP=no                                                       │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    systemd-networkd                             │   │
+│   │   Applies configuration to kernel network stack                 │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   File Naming Convention:                                               │
+│   /etc/systemd/network/                                                 │
+│   ├── 00-bmc-eth0.network      ← Static/DHCP config                     │
+│   ├── 00-bmc-eth0.netdev       ← VLAN definitions                       │
+│   └── 10-bmc-eth0.1.network    ← VLAN interface config                  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### DHCP Transaction Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    DHCP Client Operation                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   BMC (systemd-networkd)              DHCP Server                       │
+│          │                                  │                           │
+│          │  1. DHCPDISCOVER (broadcast)     │                           │
+│          │─────────────────────────────────▶│                           │
+│          │                                  │                           │
+│          │  2. DHCPOFFER                    │                           │
+│          │◀─────────────────────────────────│ IP, Mask, Gateway, DNS    │
+│          │                                  │                           │
+│          │  3. DHCPREQUEST                  │                           │
+│          │─────────────────────────────────▶│ Requesting offered IP     │
+│          │                                  │                           │
+│          │  4. DHCPACK                      │                           │
+│          │◀─────────────────────────────────│ Lease confirmed           │
+│          │                                  │                           │
+│                                                                         │
+│   Lease stored in: /run/systemd/netif/leases/                           │
+│                                                                         │
+│   D-Bus Properties Updated:                                             │
+│   ├── xyz.openbmc_project.Network.IP                                    │
+│   │   └── Address, PrefixLength, Gateway, Origin=DHCP                   │
+│   └── xyz.openbmc_project.Network.EthernetInterface                     │
+│       └── DHCPEnabled=true                                              │
+│                                                                         │
+│   DHCP Options Handled:                                                 │
+│   ├── Option 1: Subnet Mask                                             │
+│   ├── Option 3: Router (Gateway)                                        │
+│   ├── Option 6: DNS Servers                                             │
+│   ├── Option 12: Hostname                                               │
+│   ├── Option 15: Domain Name                                            │
+│   └── Option 42: NTP Servers                                            │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### VLAN Implementation
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    VLAN Configuration                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Physical Interface                                                    │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                          eth0                                   │   │
+│   │                      (untagged traffic)                         │   │
+│   └───────────────────────────┬─────────────────────────────────────┘   │
+│                               │                                         │
+│          ┌────────────────────┼────────────────────┐                    │
+│          │                    │                    │                    │
+│          ▼                    ▼                    ▼                    │
+│   ┌────────────┐       ┌────────────┐       ┌────────────┐              │
+│   │ eth0.100   │       │ eth0.200   │       │ eth0.300   │              │
+│   │ VLAN 100   │       │ VLAN 200   │       │ VLAN 300   │              │
+│   │ Management │       │ Storage    │       │ Cluster    │              │
+│   └────────────┘       └────────────┘       └────────────┘              │
+│                                                                         │
+│   VLAN .netdev file (/etc/systemd/network/00-eth0.100.netdev):          │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ [NetDev]                                                        │   │
+│   │ Name=eth0.100                                                   │   │
+│   │ Kind=vlan                                                       │   │
+│   │                                                                 │   │
+│   │ [VLAN]                                                          │   │
+│   │ Id=100                                                          │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   D-Bus VLAN Creation:                                                  │
+│   busctl call xyz.openbmc_project.Network \                             │
+│       /xyz/openbmc_project/network/eth0 \                               │
+│       xyz.openbmc_project.Network.VLAN.Create \                         │
+│       VLAN sq "eth0.100" 100                                            │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Link State Monitoring
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Link State Detection                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Kernel Netlink Events                                                 │
+│          │                                                              │
+│          ▼                                                              │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    phosphor-networkd                            │   │
+│   │   Subscribes to RTM_NEWLINK / RTM_DELLINK                       │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│          ┌─────────────────────┼─────────────────────┐                  │
+│          │                     │                     │                  │
+│          ▼                     ▼                     ▼                  │
+│   Link Up              Link Down             Link Speed Change          │
+│   ┌────────────┐       ┌────────────┐       ┌────────────┐              │
+│   │ Set D-Bus  │       │ Set D-Bus  │       │ Update     │              │
+│   │ LinkUp=true│       │ LinkUp=    │       │ Speed prop │              │
+│   │            │       │    false   │       │            │              │
+│   └────────────┘       └────────────┘       └────────────┘              │
+│                                                                         │
+│   D-Bus Properties:                                                     │
+│   /xyz/openbmc_project/network/eth0                                     │
+│   ├── LinkUp (bool) - Physical link state                               │
+│   ├── Speed (uint32) - Link speed in Mbps                               │
+│   ├── AutoNeg (bool) - Auto-negotiation enabled                         │
+│   └── MTU (uint32) - Maximum transmission unit                          │
+│                                                                         │
+│   Redfish Mapping:                                                      │
+│   ├── LinkUp → LinkStatus ("LinkUp" / "LinkDown")                       │
+│   ├── Speed → SpeedMbps                                                 │
+│   └── AutoNeg → AutoNeg                                                 │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files in [phosphor-networkd](https://github.com/openbmc/phosphor-networkd):
+
+| File | Description |
+|------|-------------|
+| `src/network_manager.cpp` | Main network manager |
+| `src/ethernet_interface.cpp` | Ethernet interface handling |
+| `src/ipaddress.cpp` | IP address management |
+| `src/vlan_interface.cpp` | VLAN interface creation |
+| `src/dhcp_configuration.cpp` | DHCP client configuration |
+| `src/dns_updater.cpp` | DNS resolver updates |
+
+---
+
 ## References
 
 - [phosphor-networkd](https://github.com/openbmc/phosphor-networkd)

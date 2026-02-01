@@ -551,6 +551,234 @@ report<MyConfigError>(
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for logging developers.
+
+### phosphor-logging Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Logging Architecture                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Application Layer                                                     │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │  Service A     Service B     Service C     Service D            │   │
+│   │     │              │             │             │                │   │
+│   │     └──────────────┴─────────────┴─────────────┘                │   │
+│   │                          │                                      │   │
+│   │                          ▼                                      │   │
+│   │              phosphor::logging::report<>()                      │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    phosphor-log-manager                         │   │
+│   │   xyz.openbmc_project.Logging                                   │   │
+│   │                                                                 │   │
+│   │   ├── /xyz/openbmc_project/logging                              │   │
+│   │   │   ├── entry/1  (Error log entry)                            │   │
+│   │   │   ├── entry/2                                               │   │
+│   │   │   └── entry/N                                               │   │
+│   │   │                                                             │   │
+│   │   └── Internal Storage: /var/lib/phosphor-logging/errors/       │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│          ┌─────────────────────┼─────────────────────┐                  │
+│          ▼                     ▼                     ▼                  │
+│   ┌────────────┐        ┌────────────┐        ┌────────────┐            │
+│   │ Redfish    │        │  IPMI SEL  │        │  journald  │            │
+│   │ LogService │        │  Logger    │        │  (syslog)  │            │
+│   └────────────┘        └────────────┘        └────────────┘            │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Error Entry Structure
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Error Log Entry                                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   D-Bus Object: /xyz/openbmc_project/logging/entry/N                    │
+│                                                                         │
+│   Interfaces and Properties:                                            │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ xyz.openbmc_project.Logging.Entry                               │   │
+│   │ ├── Id (uint32)        - Entry identifier                       │   │
+│   │ ├── Severity           - Informational/Warning/Critical         │   │
+│   │ ├── Message (string)   - Error message (MessageId)              │   │
+│   │ ├── Resolved (bool)    - Has error been acknowledged            │   │
+│   │ ├── Timestamp (uint64) - Unix timestamp in milliseconds         │   │
+│   │ └── AdditionalData     - Array of "KEY=VALUE" strings           │   │
+│   │                                                                 │   │
+│   │ xyz.openbmc_project.Association.Definitions                     │   │
+│   │ └── Associations       - Links to related objects               │   │
+│   │                                                                 │   │
+│   │ xyz.openbmc_project.Object.Delete                               │   │
+│   │ └── Delete()           - Method to delete entry                 │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   AdditionalData Example:                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ [                                                               │   │
+│   │   "SENSOR_PATH=/xyz/openbmc_project/sensors/temp/CPU0",         │   │
+│   │   "THRESHOLD_VALUE=95.0",                                       │   │
+│   │   "READING=98.5",                                               │   │
+│   │   "_PID=1234",                                                  │   │
+│   │   "CALLOUT_INVENTORY_PATH=/xyz/.../cpu0"                        │   │
+│   │ ]                                                               │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Error Reporting API
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Error Reporting Patterns                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   1. Simple Error (no metadata):                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ #include <phosphor-logging/elog.hpp>                            │   │
+│   │ #include <xyz/openbmc_project/Common/error.hpp>                 │   │
+│   │                                                                 │   │
+│   │ using InternalFailure =                                         │   │
+│   │     sdbusplus::xyz::openbmc_project::Common::Error::            │   │
+│   │     InternalFailure;                                            │   │
+│   │                                                                 │   │
+│   │ phosphor::logging::report<InternalFailure>();                   │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   2. Error with Metadata:                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ using namespace phosphor::logging;                              │   │
+│   │ using TempError = xyz::openbmc_project::Sensor::Error::         │   │
+│   │                   OverTemperature;                              │   │
+│   │ using Metadata = xyz::openbmc_project::Sensor::OverTemperature; │   │
+│   │                                                                 │   │
+│   │ report<TempError>(                                              │   │
+│   │     Metadata::SENSOR_PATH(sensorPath.c_str()),                  │   │
+│   │     Metadata::READING(98.5),                                    │   │
+│   │     Metadata::THRESHOLD(95.0)                                   │   │
+│   │ );                                                              │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   3. D-Bus Method Call (from script):                                   │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ busctl call xyz.openbmc_project.Logging \                       │   │
+│   │     /xyz/openbmc_project/logging \                              │   │
+│   │     xyz.openbmc_project.Logging.Create Create \                 │   │
+│   │     ssa{ss} \                                                   │   │
+│   │     "xyz.openbmc_project.Common.Error.InternalFailure" \        │   │
+│   │     "xyz.openbmc_project.Logging.Entry.Level.Error" \           │   │
+│   │     2 "KEY1" "value1" "KEY2" "value2"                           │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### IPMI SEL Integration
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    SEL (System Event Log) Integration                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   phosphor-sel-logger monitors D-Bus for loggable events:               │
+│                                                                         │
+│   Event Sources:                                                        │
+│   ├── Threshold crossing (Sensor.Value PropertiesChanged)               │
+│   ├── Discrete sensor state change                                      │
+│   ├── phosphor-logging new entry (InterfacesAdded)                      │
+│   └── Watchdog timeout                                                  │
+│                                                                         │
+│   SEL Record Format (IPMI 2.0, Type 02h):                               │
+│   ┌────────┬────────┬───────────────────────────────────────────────┐   │
+│   │ Offset │ Size   │ Description                                   │   │
+│   ├────────┼────────┼───────────────────────────────────────────────┤   │
+│   │ 0-1    │ 2      │ Record ID                                     │   │
+│   │ 2      │ 1      │ Record Type (0x02 = System Event)             │   │
+│   │ 3-6    │ 4      │ Timestamp                                     │   │
+│   │ 7-8    │ 2      │ Generator ID                                  │   │
+│   │ 9      │ 1      │ EvM Rev                                       │   │
+│   │ 10     │ 1      │ Sensor Type                                   │   │
+│   │ 11     │ 1      │ Sensor Number                                 │   │
+│   │ 12     │ 1      │ Event Type/Dir                                │   │
+│   │ 13-15  │ 3      │ Event Data 1-3                                │   │
+│   └────────┴────────┴───────────────────────────────────────────────┘   │
+│                                                                         │
+│   Sensor Type to SEL Mapping:                                           │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ D-Bus Sensor Type           │ IPMI Sensor Type                  │   │
+│   ├─────────────────────────────┼───────────────────────────────────┤   │
+│   │ sensors/temperature/*       │ 0x01 (Temperature)                │   │
+│   │ sensors/voltage/*           │ 0x02 (Voltage)                    │   │
+│   │ sensors/current/*           │ 0x03 (Current)                    │   │
+│   │ sensors/fan_tach/*          │ 0x04 (Fan)                        │   │
+│   │ sensors/power/*             │ 0x08 (Power Supply)               │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Log Rotation and Persistence
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Log Management                                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Storage Location:                                                     │
+│   /var/lib/phosphor-logging/errors/                                     │
+│   ├── 1        # Serialized error entry                                 │
+│   ├── 2                                                                 │
+│   └── ...                                                               │
+│                                                                         │
+│   Configuration:                                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ ERROR_CAP = 200           # Maximum number of error entries     │   │
+│   │ ERROR_INFO_CAP = 10       # Max informational entries           │   │
+│   │ ERROR_PERSIST_PATH = /var/lib/phosphor-logging/errors/          │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Rotation Behavior:                                                    │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ When ERROR_CAP reached:                                         │   │
+│   │ 1. Find oldest Informational entry → delete                     │   │
+│   │ 2. If no Informational, find oldest Warning → delete            │   │
+│   │ 3. If no Warning, find oldest Error → delete                    │   │
+│   │ 4. Critical entries protected from rotation                     │   │
+│   │ 5. Resolved entries deleted before unresolved                   │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Persistence across BMC reboot:                                        │
+│   ├── Entries serialized to filesystem using cereal                     │
+│   ├── Entry IDs are persistent                                          │
+│   └── On startup, entries loaded from /var/lib/phosphor-logging/        │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files in [phosphor-logging](https://github.com/openbmc/phosphor-logging):
+
+| File | Description |
+|------|-------------|
+| `log_manager.cpp` | Main logging manager |
+| `elog_entry.cpp` | Error log entry object |
+| `elog_serialize.cpp` | Entry persistence |
+| `extensions.cpp` | Extension point for plugins |
+| `lib/elog.cpp` | Client-side reporting API |
+
+---
+
 ## References
 
 - [phosphor-logging](https://github.com/openbmc/phosphor-logging)
