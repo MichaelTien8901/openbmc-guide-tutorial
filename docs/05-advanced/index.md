@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Advanced
+title: Advanced Topics
 nav_order: 5
 has_children: true
 permalink: /docs/advanced
