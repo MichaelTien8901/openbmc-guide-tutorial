@@ -1,0 +1,105 @@
+{
+    "Name": "FanBoard",
+    "Type": "Board",
+    "Probe": "TRUE",
+
+    "Exposes": [
+        {
+            "Name": "Fan0",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "Fan0",
+                "Pwm": 0,
+                "Tachs": [0]
+            },
+            "Thresholds": [
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 1000
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 2000
+                }
+            ]
+        },
+        {
+            "Name": "Fan1",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "Fan1",
+                "Pwm": 1,
+                "Tachs": [1]
+            },
+            "Thresholds": [
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 1000
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 2000
+                }
+            ]
+        },
+        {
+            "Name": "Fan2",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "Fan2",
+                "Pwm": 2,
+                "Tachs": [2]
+            },
+            "Thresholds": [
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 1000
+                }
+            ]
+        },
+        {
+            "Name": "Fan3",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "Fan3",
+                "Pwm": 3,
+                "Tachs": [3]
+            },
+            "Thresholds": [
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 1000
+                }
+            ]
+        },
+        {
+            "Name": "DualRotorFan",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "DualRotorFan",
+                "Pwm": 4,
+                "Tachs": [4, 5]
+            },
+            "Thresholds": [
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 1000
+                }
+            ]
+        }
+    ]
+}

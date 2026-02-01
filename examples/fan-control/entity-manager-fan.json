@@ -1,0 +1,134 @@
+{
+    "Name": "FanControl",
+    "Type": "Board",
+    "Probe": "TRUE",
+
+    "Exposes": [
+        {
+            "Name": "Zone 0",
+            "Type": "Pid.Zone",
+            "MinThermalOutput": 25.0,
+            "FailSafePercent": 100.0
+        },
+        {
+            "Name": "CPU Thermal PID",
+            "Type": "Pid",
+            "Class": "temp",
+            "Inputs": ["CPU_Temp"],
+            "SetPoint": 80.0,
+            "Zones": ["Zone 0"],
+            "PIDGains": {
+                "P": 0.0,
+                "I": -0.2,
+                "D": 0.0,
+                "FF": 0.0,
+                "ILimitMin": 0.0,
+                "ILimitMax": 100.0,
+                "OutLimitMin": 25.0,
+                "OutLimitMax": 100.0,
+                "SlewNeg": 5.0,
+                "SlewPos": 10.0
+            }
+        },
+        {
+            "Name": "Inlet Thermal PID",
+            "Type": "Pid",
+            "Class": "temp",
+            "Inputs": ["Inlet_Temp"],
+            "SetPoint": 35.0,
+            "Zones": ["Zone 0"],
+            "PIDGains": {
+                "P": 0.0,
+                "I": -0.3,
+                "D": 0.0,
+                "FF": 0.0,
+                "ILimitMin": 0.0,
+                "ILimitMax": 100.0,
+                "OutLimitMin": 25.0,
+                "OutLimitMax": 100.0,
+                "SlewNeg": 3.0,
+                "SlewPos": 5.0
+            }
+        },
+        {
+            "Name": "Fan0 PID",
+            "Type": "Pid",
+            "Class": "fan",
+            "Inputs": ["Fan0"],
+            "SetPoint": 7000.0,
+            "Zones": ["Zone 0"],
+            "PIDGains": {
+                "P": 0.0,
+                "I": 0.0,
+                "D": 0.0,
+                "FF": 1.0,
+                "ILimitMin": 0.0,
+                "ILimitMax": 100.0,
+                "OutLimitMin": 0.0,
+                "OutLimitMax": 100.0,
+                "SlewNeg": 0.0,
+                "SlewPos": 0.0
+            }
+        },
+        {
+            "Name": "Fan1 PID",
+            "Type": "Pid",
+            "Class": "fan",
+            "Inputs": ["Fan1"],
+            "SetPoint": 7000.0,
+            "Zones": ["Zone 0"],
+            "PIDGains": {
+                "P": 0.0,
+                "I": 0.0,
+                "D": 0.0,
+                "FF": 1.0,
+                "ILimitMin": 0.0,
+                "ILimitMax": 100.0,
+                "OutLimitMin": 0.0,
+                "OutLimitMax": 100.0,
+                "SlewNeg": 0.0,
+                "SlewPos": 0.0
+            }
+        },
+        {
+            "Name": "Fan2 PID",
+            "Type": "Pid",
+            "Class": "fan",
+            "Inputs": ["Fan2"],
+            "SetPoint": 7000.0,
+            "Zones": ["Zone 0"],
+            "PIDGains": {
+                "P": 0.0,
+                "I": 0.0,
+                "D": 0.0,
+                "FF": 1.0,
+                "ILimitMin": 0.0,
+                "ILimitMax": 100.0,
+                "OutLimitMin": 0.0,
+                "OutLimitMax": 100.0,
+                "SlewNeg": 0.0,
+                "SlewPos": 0.0
+            }
+        },
+        {
+            "Name": "Fan3 PID",
+            "Type": "Pid",
+            "Class": "fan",
+            "Inputs": ["Fan3"],
+            "SetPoint": 7000.0,
+            "Zones": ["Zone 0"],
+            "PIDGains": {
+                "P": 0.0,
+                "I": 0.0,
+                "D": 0.0,
+                "FF": 1.0,
+                "ILimitMin": 0.0,
+                "ILimitMax": 100.0,
+                "OutLimitMin": 0.0,
+                "OutLimitMax": 100.0,
+                "SlewNeg": 0.0,
+                "SlewPos": 0.0
+            }
+        }
+    ]
+}

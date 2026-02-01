@@ -1,0 +1,176 @@
+{
+    "version": "1.0",
+    "sensors": [
+        {
+            "name": "CPU_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/CPU_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "Inlet_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/Inlet_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "Fan0",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan0",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm1",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "Fan1",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan1",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm2",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "Fan2",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan2",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm3",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "Fan3",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan3",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm4",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        }
+    ],
+    "zones": [
+        {
+            "id": 0,
+            "minThermalOutput": 25.0,
+            "failsafePercent": 100.0
+        }
+    ],
+    "pid": [
+        {
+            "name": "CPU_Temp_Controller",
+            "type": "temp",
+            "inputs": ["CPU_Temp"],
+            "setpoint": 80.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": -0.2,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 0.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 25.0,
+                "outLim_max": 100.0,
+                "slewNeg": 5.0,
+                "slewPos": 10.0
+            }
+        },
+        {
+            "name": "Inlet_Temp_Controller",
+            "type": "temp",
+            "inputs": ["Inlet_Temp"],
+            "setpoint": 35.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": -0.3,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 0.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 25.0,
+                "outLim_max": 100.0,
+                "slewNeg": 3.0,
+                "slewPos": 5.0
+            }
+        },
+        {
+            "name": "Fan0_Speed",
+            "type": "fan",
+            "inputs": ["Fan0"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "Fan1_Speed",
+            "type": "fan",
+            "inputs": ["Fan1"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "Fan2_Speed",
+            "type": "fan",
+            "inputs": ["Fan2"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "Fan3_Speed",
+            "type": "fan",
+            "inputs": ["Fan3"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        }
+    ]
+}

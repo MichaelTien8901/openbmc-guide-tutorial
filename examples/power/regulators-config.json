@@ -1,0 +1,129 @@
+{
+    "rules": [
+        {
+            "id": "set_voltage_rule",
+            "actions": [
+                {
+                    "pmbus_write_vout_command": {
+                        "format": "linear",
+                        "exponent": -8
+                    }
+                }
+            ]
+        },
+        {
+            "id": "read_sensors_rule",
+            "actions": [
+                {
+                    "pmbus_read_sensor": {
+                        "type": "vout",
+                        "command": "0x8B",
+                        "format": "linear_16"
+                    }
+                },
+                {
+                    "pmbus_read_sensor": {
+                        "type": "iout",
+                        "command": "0x8C",
+                        "format": "linear_11"
+                    }
+                },
+                {
+                    "pmbus_read_sensor": {
+                        "type": "temperature",
+                        "command": "0x8D",
+                        "format": "linear_11"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "detect_presence_rule",
+            "actions": [
+                {
+                    "compare_presence": {
+                        "fru": "/xyz/openbmc_project/inventory/system/chassis/motherboard",
+                        "value": true
+                    }
+                }
+            ]
+        }
+    ],
+    "chassis": [
+        {
+            "number": 1,
+            "inventory_path": "/xyz/openbmc_project/inventory/system/chassis",
+            "devices": [
+                {
+                    "id": "vdd_cpu0",
+                    "is_regulator": true,
+                    "fru": "/xyz/openbmc_project/inventory/system/chassis/motherboard/cpu0",
+                    "i2c_interface": {
+                        "bus": 1,
+                        "address": "0x40"
+                    },
+                    "presence_detection": {
+                        "rule_id": "detect_presence_rule"
+                    },
+                    "configuration": {
+                        "volts": 1.0,
+                        "rule_id": "set_voltage_rule"
+                    },
+                    "rails": [
+                        {
+                            "id": "vdd_cpu0",
+                            "sensor_monitoring": {
+                                "rule_id": "read_sensors_rule"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "id": "vdd_cpu1",
+                    "is_regulator": true,
+                    "fru": "/xyz/openbmc_project/inventory/system/chassis/motherboard/cpu1",
+                    "i2c_interface": {
+                        "bus": 1,
+                        "address": "0x41"
+                    },
+                    "presence_detection": {
+                        "rule_id": "detect_presence_rule"
+                    },
+                    "configuration": {
+                        "volts": 1.0,
+                        "rule_id": "set_voltage_rule"
+                    },
+                    "rails": [
+                        {
+                            "id": "vdd_cpu1",
+                            "sensor_monitoring": {
+                                "rule_id": "read_sensors_rule"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "id": "vdd_mem",
+                    "is_regulator": true,
+                    "fru": "/xyz/openbmc_project/inventory/system/chassis/motherboard",
+                    "i2c_interface": {
+                        "bus": 2,
+                        "address": "0x40"
+                    },
+                    "configuration": {
+                        "volts": 1.2,
+                        "rule_id": "set_voltage_rule"
+                    },
+                    "rails": [
+                        {
+                            "id": "vdd_mem",
+                            "sensor_monitoring": {
+                                "rule_id": "read_sensors_rule"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

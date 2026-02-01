@@ -1,0 +1,54 @@
+{
+    "name": "OpenBMC Development",
+    "build": {
+        "dockerfile": "../docker/Dockerfile",
+        "context": "../docker",
+        "args": {
+            "USER_ID": "1000",
+            "GROUP_ID": "1000"
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-extension-pack",
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "redhat.vscode-yaml",
+                "yocto-project.yocto-bitbake",
+                "mhutchie.git-graph",
+                "eamodio.gitlens",
+                "streetsidesoftware.code-spell-checker"
+            ],
+            "settings": {
+                "terminal.integrated.defaultProfile.linux": "bash",
+                "editor.tabSize": 4,
+                "editor.insertSpaces": true,
+                "files.trimTrailingWhitespace": true,
+                "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+                "C_Cpp.default.cStandard": "c17",
+                "C_Cpp.default.cppStandard": "c++20",
+                "python.defaultInterpreterPath": "/usr/bin/python3"
+            }
+        }
+    },
+    "mounts": [
+        "source=${localWorkspaceFolder}/../openbmc,target=/workspace/openbmc,type=bind",
+        "source=openbmc-sstate-cache,target=/workspace/openbmc/build/sstate-cache,type=volume",
+        "source=openbmc-downloads,target=/workspace/openbmc/build/downloads,type=volume"
+    ],
+    "workspaceFolder": "/workspace/openbmc",
+    "remoteUser": "openbmc",
+    "containerEnv": {
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8"
+    },
+    "postCreateCommand": "git config --global --add safe.directory /workspace/openbmc",
+    "forwardPorts": [2222, 2443, 2623],
+    "portsAttributes": {
+        "2222": {"label": "BMC SSH"},
+        "2443": {"label": "BMC HTTPS/Redfish"},
+        "2623": {"label": "BMC IPMI"}
+    }
+}

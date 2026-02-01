@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # Main build environment
+  openbmc-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USER_ID: ${UID:-1000}
+        GROUP_ID: ${GID:-1000}
+    image: openbmc-builder:latest
+    container_name: openbmc-builder
+    hostname: openbmc-builder
+    volumes:
+      # Mount OpenBMC source (clone outside container first)
+      - ../openbmc:/workspace/openbmc
+      # Persist build cache between sessions
+      - openbmc-sstate-cache:/workspace/openbmc/build/sstate-cache
+      - openbmc-downloads:/workspace/openbmc/build/downloads
+    environment:
+      - LANG=en_US.UTF-8
+      - LC_ALL=en_US.UTF-8
+      # Optimize BitBake parallelism
+      - BB_NUMBER_THREADS=${BB_NUMBER_THREADS:-4}
+      - PARALLEL_MAKE=${PARALLEL_MAKE:--j4}
+    stdin_open: true
+    tty: true
+    # Resource limits (adjust based on your system)
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+    working_dir: /workspace/openbmc
+
+  # QEMU testing environment
+  openbmc-qemu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: openbmc-builder:latest
+    container_name: openbmc-qemu
+    hostname: openbmc-qemu
+    volumes:
+      - ../openbmc:/workspace/openbmc:ro
+    ports:
+      # SSH access to emulated BMC
+      - "2222:2222"
+      # HTTPS/Redfish access
+      - "2443:2443"
+      # IPMI access
+      - "2623:2623/udp"
+    stdin_open: true
+    tty: true
+    working_dir: /workspace/openbmc
+    command: >
+      bash -c "
+        echo 'Starting QEMU with romulus machine...'
+        qemu-system-arm -m 256 -M romulus-bmc -nographic \
+          -drive file=/workspace/openbmc/build/tmp/deploy/images/romulus/obmc-phosphor-image-romulus.static.mtd,format=raw,if=mtd \
+          -net nic \
+          -net user,hostfwd=tcp::2222-:22,hostfwd=tcp::2443-:443,hostfwd=udp::2623-:623
+      "
+
+volumes:
+  # Named volumes for build caching
+  openbmc-sstate-cache:
+    driver: local
+  openbmc-downloads:
+    driver: local

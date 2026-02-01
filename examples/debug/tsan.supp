@@ -1,0 +1,163 @@
+# ThreadSanitizer Suppression File for OpenBMC
+#
+# Usage:
+#   export TSAN_OPTIONS="suppressions=/etc/tsan.supp"
+#
+# Suppression types:
+#   race          - Data race
+#   deadlock      - Lock order violation
+#   mutex         - Mutex issues
+#   thread        - Thread leaks
+#   signal        - Signal handler issues
+#
+# Patterns:
+#   function_name           - Exact function match
+#   function_prefix*        - Prefix match
+#   *function_suffix        - Suffix match
+#   source_file.cpp         - Source file match
+
+# =============================================================================
+# Known benign races in system libraries
+# =============================================================================
+
+# GLib internal counters
+race:g_atomic_*
+race:g_once_*
+race:g_type_*
+
+# D-Bus internal state
+race:dbus_connection_*
+race:dbus_message_*
+race:_dbus_*
+
+# systemd/sd-bus internal
+race:sd_bus_*
+race:sd_event_*
+
+# =============================================================================
+# sdbusplus known races
+# =============================================================================
+
+# sdbusplus uses atomic operations internally
+race:sdbusplus::*
+race:*sdbusplus*bus*
+race:*sdbusplus*message*
+
+# =============================================================================
+# Boost.Asio known patterns
+# =============================================================================
+
+# Boost.Asio io_context
+race:boost::asio::*
+race:*io_context*
+race:*io_service*
+
+# =============================================================================
+# OpenSSL known races (benign)
+# =============================================================================
+
+# OpenSSL lazy initialization
+race:CRYPTO_*
+race:SSL_*
+race:EVP_*
+race:ENGINE_*
+
+# =============================================================================
+# phosphor-logging
+# =============================================================================
+
+# Logging often has benign races in counters
+race:phosphor::logging::*
+race:*log_manager*
+
+# =============================================================================
+# phosphor-state-manager
+# =============================================================================
+
+# State transitions may have benign races
+race:phosphor::state::*
+
+# =============================================================================
+# entity-manager
+# =============================================================================
+
+# Entity manager probe operations
+race:*entity*manager*
+
+# =============================================================================
+# dbus-sensors
+# =============================================================================
+
+# Sensor reading updates
+race:*dbus*sensors*
+race:*Sensor*reading*
+
+# =============================================================================
+# bmcweb
+# =============================================================================
+
+# HTTP connection handling
+race:*bmcweb*
+race:*crow*
+
+# =============================================================================
+# Intentional lock order patterns
+# =============================================================================
+
+# If your code has intentional lock hierarchies that TSan flags,
+# suppress the deadlock warnings here
+
+# Example: custom lock ordering
+# deadlock:MyClass::innerLock
+# deadlock:MyClass::outerLock
+
+# =============================================================================
+# Thread leaks (daemon threads that don't join)
+# =============================================================================
+
+# Background worker threads that run until program exit
+thread:*worker_thread*
+thread:*background*
+thread:*monitor*
+
+# Boost.Asio internal threads
+thread:*io_context*
+
+# =============================================================================
+# Signal handler suppressions
+# =============================================================================
+
+# Async-signal-safe function calls
+signal:*handler*
+
+# =============================================================================
+# Third-party library suppressions
+# =============================================================================
+
+# If using third-party libraries with known races
+# race:libthirdparty.so
+# race:libvendor*
+
+# =============================================================================
+# Source file suppressions (suppress entire files)
+# =============================================================================
+
+# Legacy code with known races
+# race:legacy_module.cpp
+# race:old_driver.c
+
+# =============================================================================
+# Wildcard suppressions (use sparingly)
+# =============================================================================
+
+# Suppress all races in specific shared objects
+# race:*libknown_racy.so*
+
+# =============================================================================
+# Template for adding new suppressions
+# =============================================================================
+
+# {
+#   # Description of why this is suppressed
+#   race:function_or_pattern
+# }

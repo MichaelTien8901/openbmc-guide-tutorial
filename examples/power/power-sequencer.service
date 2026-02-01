@@ -1,0 +1,47 @@
+# Example power sequencer systemd service
+# This service demonstrates how to hook custom power sequencing logic
+# into OpenBMC's power state transitions.
+#
+# Installation:
+# 1. Copy this file to /lib/systemd/system/
+# 2. Create the corresponding script at /usr/bin/power-sequencer.sh
+# 3. Enable the service: systemctl enable power-sequencer.service
+# 4. Reload systemd: systemctl daemon-reload
+
+[Unit]
+Description=Custom Power Sequencer
+Documentation=https://github.com/openbmc/docs
+
+# Start after chassis power is initiated
+After=obmc-chassis-poweron@0.target
+
+# Stop before chassis power off completes
+Before=obmc-chassis-poweroff@0.target
+
+# Only run when the host is intended to be on
+ConditionPathExists=/run/openbmc/host@0-on
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Power on sequence
+ExecStart=/usr/bin/power-sequencer.sh on
+
+# Power off sequence (runs on stop)
+ExecStop=/usr/bin/power-sequencer.sh off
+
+# Timeout for power sequences
+TimeoutStartSec=60
+TimeoutStopSec=60
+
+# Restart policy
+Restart=no
+
+# Environment
+Environment=POWER_GOOD_GPIO=power-ok
+Environment=POWER_ENABLE_GPIO=power-enable
+
+[Install]
+# This service is part of the host start sequence
+WantedBy=obmc-host-start@0.target

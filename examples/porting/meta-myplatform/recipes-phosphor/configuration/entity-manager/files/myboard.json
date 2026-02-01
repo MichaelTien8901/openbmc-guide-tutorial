@@ -1,0 +1,152 @@
+{
+    "$schema": "https://raw.githubusercontent.com/openbmc/entity-manager/master/schemas/legacy.json",
+    "Exposes": [
+        {
+            "Name": "CPU_Temp",
+            "Type": "TMP75",
+            "Bus": 0,
+            "Address": "0x48",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 95
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper non critical",
+                    "Severity": 0,
+                    "Value": 85
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 0
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower non critical",
+                    "Severity": 0,
+                    "Value": 5
+                }
+            ]
+        },
+        {
+            "Name": "Board_Temp",
+            "Type": "TMP75",
+            "Bus": 0,
+            "Address": "0x49",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 70
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper non critical",
+                    "Severity": 0,
+                    "Value": 60
+                }
+            ]
+        },
+        {
+            "Name": "PSU1",
+            "Type": "pmbus",
+            "Bus": 2,
+            "Address": "0x58",
+            "Labels": [
+                "vin",
+                "vout1",
+                "iout1",
+                "temp1",
+                "fan1"
+            ]
+        },
+        {
+            "Name": "FAN0",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "System Fan 0 Connector",
+                "Pwm": 0,
+                "Tachs": [0]
+            },
+            "Thresholds": [
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 1000
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower non critical",
+                    "Severity": 0,
+                    "Value": 2000
+                }
+            ]
+        },
+        {
+            "Name": "FAN1",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "System Fan 1 Connector",
+                "Pwm": 1,
+                "Tachs": [1]
+            },
+            "Thresholds": [
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 1000
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower non critical",
+                    "Severity": 0,
+                    "Value": 2000
+                }
+            ]
+        },
+        {
+            "Name": "Baseboard FRU",
+            "Type": "EEPROM",
+            "Bus": 1,
+            "Address": "0x50"
+        },
+        {
+            "Address": "0xB0",
+            "Bus": 3,
+            "Name": "ADC_12V",
+            "ScaleFactor": 0.00488,
+            "Type": "ADC"
+        },
+        {
+            "Address": "0xB1",
+            "Bus": 3,
+            "Name": "ADC_5V",
+            "ScaleFactor": 0.00244,
+            "Type": "ADC"
+        },
+        {
+            "Address": "0xB2",
+            "Bus": 3,
+            "Name": "ADC_3V3",
+            "ScaleFactor": 0.00161,
+            "Type": "ADC"
+        }
+    ],
+    "Name": "MyBoard Baseboard",
+    "Probe": "TRUE",
+    "Type": "Board",
+    "xyz.openbmc_project.Inventory.Decorator.Asset": {
+        "Manufacturer": "MyCompany",
+        "Model": "MyBoard",
+        "PartNumber": "MB-001",
+        "SerialNumber": "SN123456"
+    }
+}

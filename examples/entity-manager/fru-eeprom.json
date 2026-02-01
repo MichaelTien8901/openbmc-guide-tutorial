@@ -1,0 +1,43 @@
+{
+    "Name": "FRUDevices",
+    "Type": "Board",
+    "Probe": "TRUE",
+
+    "Exposes": [
+        {
+            "Name": "Baseboard FRU",
+            "Type": "EEPROM",
+            "Bus": 0,
+            "Address": "0x50",
+            "Size": 256
+        },
+        {
+            "Name": "Riser FRU",
+            "Type": "EEPROM",
+            "Bus": 5,
+            "Address": "0x50",
+            "Size": 256
+        },
+        {
+            "Name": "Backplane FRU",
+            "Type": "EEPROM",
+            "Bus": 6,
+            "Address": "0x50",
+            "Size": 256
+        },
+        {
+            "Name": "PSU0 FRU",
+            "Type": "EEPROM",
+            "Bus": 3,
+            "Address": "0x50",
+            "Size": 256
+        },
+        {
+            "Name": "PSU1 FRU",
+            "Type": "EEPROM",
+            "Bus": 3,
+            "Address": "0x51",
+            "Size": 256
+        }
+    ]
+}

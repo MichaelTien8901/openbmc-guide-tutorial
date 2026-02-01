@@ -1,0 +1,280 @@
+# Valgrind Suppression File for OpenBMC
+#
+# Usage:
+#   valgrind --suppressions=/etc/valgrind.supp --leak-check=full /usr/bin/program
+#
+# To generate new suppressions:
+#   valgrind --gen-suppressions=all --leak-check=full /usr/bin/program 2>&1 | \
+#     grep -A 20 "^{" >> valgrind.supp
+
+# =============================================================================
+# GLib / GObject Suppressions
+# =============================================================================
+
+{
+   glib_type_class_ref_leak
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   ...
+   fun:g_type_class_ref
+}
+
+{
+   glib_type_init_leak
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   ...
+   fun:g_type_init*
+}
+
+{
+   glib_main_context_leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:g_main_context_new
+}
+
+{
+   glib_slice_allocator
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   ...
+   fun:g_slice_alloc
+}
+
+{
+   gobject_type_register
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:*alloc
+   ...
+   fun:g_type_register_*
+}
+
+# =============================================================================
+# D-Bus Suppressions
+# =============================================================================
+
+{
+   dbus_connection_open_leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:dbus_connection_open*
+}
+
+{
+   dbus_message_new_leak
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:*alloc
+   ...
+   fun:dbus_message_new*
+}
+
+{
+   dbus_threads_init
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:dbus_threads_init*
+}
+
+# =============================================================================
+# systemd / sd-bus Suppressions
+# =============================================================================
+
+{
+   systemd_internal_alloc
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   obj:*libsystemd.so*
+}
+
+{
+   sd_bus_open_leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:sd_bus_open*
+}
+
+{
+   sd_event_new_leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:sd_event_new
+}
+
+# =============================================================================
+# sdbusplus Suppressions
+# =============================================================================
+
+{
+   sdbusplus_bus_new
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:*sdbusplus*bus*new*
+}
+
+{
+   sdbusplus_message
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:*alloc
+   ...
+   fun:*sdbusplus*message*
+}
+
+# =============================================================================
+# OpenSSL Suppressions
+# =============================================================================
+
+{
+   openssl_init_leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:OPENSSL_init_ssl
+}
+
+{
+   openssl_crypto_leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:CRYPTO_*
+}
+
+{
+   openssl_engine_leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:ENGINE_*
+}
+
+# =============================================================================
+# Boost Suppressions
+# =============================================================================
+
+{
+   boost_asio_leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:*boost*asio*
+}
+
+{
+   boost_beast_leak
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:*alloc
+   ...
+   fun:*boost*beast*
+}
+
+# =============================================================================
+# pthread / libc Suppressions
+# =============================================================================
+
+{
+   pthread_create_leak
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:pthread_create*
+}
+
+{
+   dlopen_leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:dlopen*
+}
+
+{
+   libc_freeres_leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:__libc_freeres
+}
+
+# =============================================================================
+# nlohmann/json Suppressions
+# =============================================================================
+
+{
+   nlohmann_json_parse
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:*alloc
+   ...
+   fun:*nlohmann*json*parse*
+}
+
+# =============================================================================
+# phosphor-logging Suppressions
+# =============================================================================
+
+{
+   phosphor_logging_init
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:*alloc
+   ...
+   fun:*phosphor*logging*
+}
+
+# =============================================================================
+# Uninitialized value suppressions (common false positives)
+# =============================================================================
+
+{
+   glibc_strlen_uninitialized
+   Memcheck:Cond
+   fun:strlen
+   fun:*
+}
+
+{
+   glibc_strchr_uninitialized
+   Memcheck:Cond
+   fun:*strchr*
+   fun:*
+}
+
+# =============================================================================
+# ARM-specific suppressions (if running on ARM)
+# =============================================================================
+
+{
+   arm_neon_uninitialized
+   Memcheck:Cond
+   ...
+   obj:*libc*.so*
+}

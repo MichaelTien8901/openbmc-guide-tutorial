@@ -1,0 +1,234 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+// ARM Example BMC Device Tree
+//
+// This is an example device tree for an ARM-based BMC platform.
+// Customize for your specific hardware.
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+
+/ {
+    model = "ARM Example BMC Platform";
+    compatible = "example,arm-bmc", "arm,cortex-a53";
+
+    #address-cells = <2>;
+    #size-cells = <2>;
+
+    // =========================================================================
+    // Chosen Node - Boot Configuration
+    // =========================================================================
+    chosen {
+        stdout-path = "serial0:115200n8";
+        bootargs = "console=ttyAMA0,115200 earlycon";
+    };
+
+    // =========================================================================
+    // Aliases - Consistent Device Naming
+    // =========================================================================
+    aliases {
+        serial0 = &uart0;
+        i2c0 = &i2c0;
+        i2c1 = &i2c1;
+        spi0 = &spi0;
+    };
+
+    // =========================================================================
+    // Memory Configuration
+    // =========================================================================
+    memory@80000000 {
+        device_type = "memory";
+        reg = <0x0 0x80000000 0x0 0x40000000>; // 1GB at 0x80000000
+    };
+
+    // =========================================================================
+    // Reserved Memory
+    // =========================================================================
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+
+        // Secure world reserved memory (for TF-A/OP-TEE)
+        secure_region: secure@be000000 {
+            reg = <0x0 0xbe000000 0x0 0x02000000>;
+            no-map;
+        };
+    };
+
+    // =========================================================================
+    // LEDs - Status Indicators
+    // =========================================================================
+    leds {
+        compatible = "gpio-leds";
+
+        heartbeat {
+            label = "bmc:green:heartbeat";
+            gpios = <&gpio0 0 GPIO_ACTIVE_HIGH>;
+            linux,default-trigger = "heartbeat";
+        };
+
+        identify {
+            label = "bmc:blue:identify";
+            gpios = <&gpio0 1 GPIO_ACTIVE_HIGH>;
+            default-state = "off";
+        };
+
+        fault {
+            label = "bmc:red:fault";
+            gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+            default-state = "off";
+        };
+    };
+
+    // =========================================================================
+    // Buttons - Physical Controls
+    // =========================================================================
+    gpio-keys {
+        compatible = "gpio-keys";
+
+        power-button {
+            label = "Power Button";
+            gpios = <&gpio0 10 GPIO_ACTIVE_LOW>;
+            linux,code = <KEY_POWER>;
+        };
+
+        reset-button {
+            label = "Reset Button";
+            gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
+            linux,code = <KEY_RESTART>;
+        };
+
+        id-button {
+            label = "ID Button";
+            gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
+            linux,code = <KEY_PROG1>;
+        };
+    };
+};
+
+// =============================================================================
+// UART - Serial Console
+// =============================================================================
+&uart0 {
+    status = "okay";
+    // ARM PL011 UART - typically at 0x09000000
+};
+
+// =============================================================================
+// I2C Buses - Sensor and FRU Access
+// =============================================================================
+&i2c0 {
+    status = "okay";
+    clock-frequency = <100000>;  // 100 kHz standard mode
+
+    // Temperature sensor - CPU
+    tmp75_cpu: tmp75@48 {
+        compatible = "ti,tmp75";
+        reg = <0x48>;
+        label = "CPU Temperature";
+    };
+
+    // Temperature sensor - Ambient
+    tmp75_ambient: tmp75@49 {
+        compatible = "ti,tmp75";
+        reg = <0x49>;
+        label = "Ambient Temperature";
+    };
+
+    // System FRU EEPROM
+    eeprom_fru: eeprom@50 {
+        compatible = "atmel,24c256";
+        reg = <0x50>;
+        label = "System FRU";
+    };
+};
+
+&i2c1 {
+    status = "okay";
+    clock-frequency = <400000>;  // 400 kHz fast mode
+
+    // Power supply monitoring
+    pmbus_psu0: pmbus@58 {
+        compatible = "pmbus";
+        reg = <0x58>;
+        label = "PSU0";
+    };
+
+    // Voltage regulator monitoring
+    adm1275: adm1275@10 {
+        compatible = "adi,adm1275";
+        reg = <0x10>;
+        label = "12V Rail";
+    };
+};
+
+// =============================================================================
+// SPI - Flash Storage
+// =============================================================================
+&spi0 {
+    status = "okay";
+
+    flash@0 {
+        compatible = "jedec,spi-nor";
+        reg = <0>;
+        spi-max-frequency = <50000000>;
+
+        partitions {
+            compatible = "fixed-partitions";
+            #address-cells = <1>;
+            #size-cells = <1>;
+
+            u-boot@0 {
+                label = "u-boot";
+                reg = <0x0 0x100000>;  // 1MB
+            };
+
+            kernel@100000 {
+                label = "kernel";
+                reg = <0x100000 0x900000>;  // 9MB
+            };
+
+            rootfs@a00000 {
+                label = "rootfs";
+                reg = <0xa00000 0x2600000>;  // 38MB
+            };
+
+            rwfs@3000000 {
+                label = "rwfs";
+                reg = <0x3000000 0x1000000>;  // 16MB
+            };
+        };
+    };
+};
+
+// =============================================================================
+// GPIO - Platform Control
+// =============================================================================
+&gpio0 {
+    status = "okay";
+
+    // Power control outputs
+    host-power-enable {
+        gpio-hog;
+        gpios = <20 GPIO_ACTIVE_HIGH>;
+        output-low;
+        line-name = "host-power-enable";
+    };
+
+    host-reset {
+        gpio-hog;
+        gpios = <21 GPIO_ACTIVE_LOW>;
+        output-high;  // Not asserted
+        line-name = "host-reset";
+    };
+};
+
+// =============================================================================
+// Watchdog Timer
+// =============================================================================
+&watchdog0 {
+    status = "okay";
+    timeout-sec = <30>;
+};

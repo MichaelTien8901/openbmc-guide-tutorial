@@ -1,0 +1,63 @@
+{
+    "gpio_configs": [
+        {
+            "name": "power-button-out",
+            "direction": "out",
+            "polarity": "active_low",
+            "description": "Assert to simulate power button press"
+        },
+        {
+            "name": "power-ok",
+            "direction": "in",
+            "polarity": "active_high",
+            "description": "High when system power is good"
+        },
+        {
+            "name": "post-complete",
+            "direction": "in",
+            "polarity": "active_high",
+            "description": "High when POST completes"
+        },
+        {
+            "name": "reset-button-out",
+            "direction": "out",
+            "polarity": "active_low",
+            "description": "Assert to simulate reset button press"
+        },
+        {
+            "name": "nmi-button-out",
+            "direction": "out",
+            "polarity": "active_low",
+            "description": "Assert to trigger NMI"
+        },
+        {
+            "name": "id-button-in",
+            "direction": "in",
+            "polarity": "active_low",
+            "description": "ID button input"
+        },
+        {
+            "name": "power-button-in",
+            "direction": "in",
+            "polarity": "active_low",
+            "description": "Physical power button input"
+        },
+        {
+            "name": "reset-button-in",
+            "direction": "in",
+            "polarity": "active_low",
+            "description": "Physical reset button input"
+        }
+    ],
+    "timing": {
+        "power_button_press_ms": 200,
+        "power_button_long_press_ms": 4000,
+        "reset_button_press_ms": 200,
+        "power_off_timeout_s": 30,
+        "graceful_shutdown_timeout_s": 300
+    },
+    "power_restore_policy": {
+        "default": "Restore",
+        "options": ["AlwaysOn", "AlwaysOff", "Restore"]
+    }
+}

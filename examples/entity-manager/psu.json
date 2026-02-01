@@ -1,0 +1,72 @@
+{
+    "Name": "PowerSupplies",
+    "Type": "Board",
+    "Probe": "TRUE",
+
+    "Exposes": [
+        {
+            "Name": "PSU0",
+            "Type": "pmbus",
+            "Bus": 3,
+            "Address": "0x58",
+            "Labels": [
+                "vin",
+                "vout1",
+                "iout1",
+                "pin",
+                "pout1",
+                "temp1",
+                "temp2",
+                "fan1"
+            ],
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Label": "temp1",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 100
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "temp1",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 90
+                }
+            ]
+        },
+        {
+            "Name": "PSU1",
+            "Type": "pmbus",
+            "Bus": 3,
+            "Address": "0x59",
+            "Labels": [
+                "vin",
+                "vout1",
+                "iout1",
+                "pin",
+                "pout1",
+                "temp1",
+                "temp2",
+                "fan1"
+            ],
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Label": "temp1",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 100
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "temp1",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 90
+                }
+            ]
+        }
+    ]
+}

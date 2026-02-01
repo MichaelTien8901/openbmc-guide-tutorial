@@ -1,0 +1,145 @@
+{
+    "Name": "ExampleBaseboard",
+    "Type": "Board",
+    "Probe": "xyz.openbmc_project.FruDevice({'PRODUCT_PRODUCT_NAME': 'Example Board'})",
+
+    "xyz.openbmc_project.Inventory.Item": {
+        "Present": true,
+        "PrettyName": "Example Server Main Board"
+    },
+
+    "xyz.openbmc_project.Inventory.Decorator.Asset": {
+        "Manufacturer": "$PRODUCT_MANUFACTURER",
+        "Model": "$PRODUCT_PRODUCT_NAME",
+        "PartNumber": "$PRODUCT_PART_NUMBER",
+        "SerialNumber": "$PRODUCT_SERIAL_NUMBER"
+    },
+
+    "Exposes": [
+        {
+            "Name": "Inlet Temp",
+            "Type": "TMP75",
+            "Bus": "$bus",
+            "Address": "0x48",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 45
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 40
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 5
+                }
+            ]
+        },
+        {
+            "Name": "Outlet Temp",
+            "Type": "TMP75",
+            "Bus": "$bus",
+            "Address": "0x49",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 55
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 50
+                }
+            ]
+        },
+        {
+            "Name": "P12V",
+            "Type": "ADC",
+            "Index": 0,
+            "ScaleFactor": 4.0,
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 13.2
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 12.6
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 11.4
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 10.8
+                }
+            ]
+        },
+        {
+            "Name": "P3V3",
+            "Type": "ADC",
+            "Index": 1,
+            "ScaleFactor": 1.0,
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 3.6
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 3.0
+                }
+            ]
+        },
+        {
+            "Name": "Fan0",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "Fan0",
+                "Pwm": 0,
+                "Tachs": [0]
+            }
+        },
+        {
+            "Name": "Fan1",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "Fan1",
+                "Pwm": 1,
+                "Tachs": [1]
+            }
+        },
+        {
+            "Name": "System FRU",
+            "Type": "EEPROM",
+            "Bus": "$bus",
+            "Address": "0x50",
+            "Size": 256
+        }
+    ]
+}

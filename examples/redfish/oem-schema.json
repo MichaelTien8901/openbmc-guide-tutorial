@@ -1,0 +1,75 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "http://myvendor.com/schemas/v1/OemBoardInfo.v1_0_0.json",
+    "title": "#OemBoardInfo.v1_0_0.BoardInfo",
+    "description": "MyVendor OEM Board Information Resource",
+    "type": "object",
+    "properties": {
+        "@odata.type": {
+            "type": "string",
+            "const": "#OemBoardInfo.v1_0_0.BoardInfo"
+        },
+        "@odata.id": {
+            "type": "string",
+            "format": "uri"
+        },
+        "Id": {
+            "type": "string",
+            "description": "Unique identifier for this resource"
+        },
+        "Name": {
+            "type": "string",
+            "description": "Human-readable name"
+        },
+        "Manufacturer": {
+            "type": "string",
+            "description": "Board manufacturer"
+        },
+        "BoardType": {
+            "type": "string",
+            "enum": ["Server", "Workstation", "Storage", "Network"],
+            "description": "Type of board"
+        },
+        "BoardRevision": {
+            "type": "string",
+            "description": "Board revision string"
+        },
+        "CpuSlots": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8,
+            "description": "Number of CPU sockets"
+        },
+        "DimmSlots": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 64,
+            "description": "Number of DIMM slots"
+        },
+        "PcieSlots": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16,
+            "description": "Number of PCIe slots"
+        },
+        "MaxPowerWatts": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Maximum power consumption in watts"
+        },
+        "Status": {
+            "type": "object",
+            "properties": {
+                "State": {
+                    "type": "string",
+                    "enum": ["Enabled", "Disabled", "StandbyOffline", "StandbySpare", "Starting"]
+                },
+                "Health": {
+                    "type": "string",
+                    "enum": ["OK", "Warning", "Critical"]
+                }
+            }
+        }
+    },
+    "required": ["@odata.type", "@odata.id", "Id", "Name"]
+}

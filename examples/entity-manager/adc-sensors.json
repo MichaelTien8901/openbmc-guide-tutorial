@@ -1,0 +1,200 @@
+{
+    "Name": "ADCSensors",
+    "Type": "Board",
+    "Probe": "TRUE",
+
+    "Exposes": [
+        {
+            "Index": 0,
+            "Name": "P12V_AUX",
+            "ScaleFactor": 4.0,
+            "Type": "ADC",
+            "PowerState": "Always",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 13.2
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 12.6
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 11.4
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 10.8
+                }
+            ]
+        },
+        {
+            "Index": 1,
+            "Name": "P12V_MAIN",
+            "ScaleFactor": 4.0,
+            "Type": "ADC",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 13.2
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 10.8
+                }
+            ]
+        },
+        {
+            "Index": 2,
+            "Name": "P5V",
+            "ScaleFactor": 2.0,
+            "Type": "ADC",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 5.5
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 5.25
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 4.75
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 4.5
+                }
+            ]
+        },
+        {
+            "Index": 3,
+            "Name": "P3V3_AUX",
+            "ScaleFactor": 1.0,
+            "Type": "ADC",
+            "PowerState": "Always",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 3.6
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 3.0
+                }
+            ]
+        },
+        {
+            "Index": 4,
+            "Name": "P3V3_MAIN",
+            "ScaleFactor": 1.0,
+            "Type": "ADC",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 3.6
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 3.0
+                }
+            ]
+        },
+        {
+            "Index": 5,
+            "Name": "P1V8",
+            "ScaleFactor": 1.0,
+            "Type": "ADC",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 1.98
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 1.62
+                }
+            ]
+        },
+        {
+            "Index": 6,
+            "Name": "P1V05",
+            "ScaleFactor": 1.0,
+            "Type": "ADC",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 1.155
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 0.945
+                }
+            ]
+        },
+        {
+            "Index": 7,
+            "Name": "PVCCIN",
+            "ScaleFactor": 1.0,
+            "Type": "ADC",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 2.0
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 1.4
+                }
+            ]
+        }
+    ]
+}

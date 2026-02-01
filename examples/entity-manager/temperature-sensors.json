@@ -1,0 +1,129 @@
+{
+    "Name": "TemperatureSensors",
+    "Type": "Board",
+    "Probe": "TRUE",
+
+    "Exposes": [
+        {
+            "Name": "Ambient Temp",
+            "Type": "TMP75",
+            "Bus": 1,
+            "Address": "0x48",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 45
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 40
+                }
+            ]
+        },
+        {
+            "Name": "CPU0 Temp",
+            "Type": "TMP421",
+            "Bus": 1,
+            "Address": "0x4C",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 100
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 90
+                }
+            ]
+        },
+        {
+            "Name": "VRM Temp",
+            "Type": "LM75A",
+            "Bus": 2,
+            "Address": "0x48",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 105
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 95
+                }
+            ]
+        },
+        {
+            "Name": "DIMM0 Temp",
+            "Type": "TMP112",
+            "Bus": 3,
+            "Address": "0x48",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 85
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 80
+                }
+            ]
+        },
+        {
+            "Name": "DIMM1 Temp",
+            "Type": "TMP112",
+            "Bus": 3,
+            "Address": "0x49",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 85
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 80
+                }
+            ]
+        },
+        {
+            "Name": "PCH Temp",
+            "Type": "EMC1413",
+            "Bus": 4,
+            "Address": "0x4C",
+            "Labels": ["temp1", "temp2", "temp3"],
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 100
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 90
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,245 @@
+{
+    "version": "1.0",
+    "sensors": [
+        {
+            "name": "CPU0_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/CPU0_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "CPU1_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/CPU1_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "DIMM_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/DIMM_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "Storage_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/Storage_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "CPU_Fan0",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/CPU_Fan0",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm1",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "CPU_Fan1",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/CPU_Fan1",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm2",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "Sys_Fan0",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Sys_Fan0",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm3",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "Sys_Fan1",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Sys_Fan1",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm4",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        }
+    ],
+    "zones": [
+        {
+            "id": 0,
+            "minThermalOutput": 30.0,
+            "failsafePercent": 100.0,
+            "comment": "CPU Zone - CPU fans respond to CPU temperatures"
+        },
+        {
+            "id": 1,
+            "minThermalOutput": 25.0,
+            "failsafePercent": 100.0,
+            "comment": "System Zone - System fans respond to DIMM and storage temps"
+        }
+    ],
+    "pid": [
+        {
+            "name": "CPU0_Controller",
+            "type": "temp",
+            "inputs": ["CPU0_Temp"],
+            "setpoint": 85.0,
+            "zone": 0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": -0.15,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 0.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 30.0,
+                "outLim_max": 100.0,
+                "slewNeg": 5.0,
+                "slewPos": 10.0
+            }
+        },
+        {
+            "name": "CPU1_Controller",
+            "type": "temp",
+            "inputs": ["CPU1_Temp"],
+            "setpoint": 85.0,
+            "zone": 0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": -0.15,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 0.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 30.0,
+                "outLim_max": 100.0,
+                "slewNeg": 5.0,
+                "slewPos": 10.0
+            }
+        },
+        {
+            "name": "DIMM_Controller",
+            "type": "temp",
+            "inputs": ["DIMM_Temp"],
+            "setpoint": 75.0,
+            "zone": 1,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": -0.2,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 0.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 25.0,
+                "outLim_max": 100.0,
+                "slewNeg": 3.0,
+                "slewPos": 5.0
+            }
+        },
+        {
+            "name": "Storage_Controller",
+            "type": "temp",
+            "inputs": ["Storage_Temp"],
+            "setpoint": 50.0,
+            "zone": 1,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": -0.25,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 0.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 25.0,
+                "outLim_max": 100.0,
+                "slewNeg": 3.0,
+                "slewPos": 5.0
+            }
+        },
+        {
+            "name": "CPU_Fan0_Speed",
+            "type": "fan",
+            "inputs": ["CPU_Fan0"],
+            "setpoint": 8000.0,
+            "zone": 0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "CPU_Fan1_Speed",
+            "type": "fan",
+            "inputs": ["CPU_Fan1"],
+            "setpoint": 8000.0,
+            "zone": 0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "Sys_Fan0_Speed",
+            "type": "fan",
+            "inputs": ["Sys_Fan0"],
+            "setpoint": 6000.0,
+            "zone": 1,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "Sys_Fan1_Speed",
+            "type": "fan",
+            "inputs": ["Sys_Fan1"],
+            "setpoint": 6000.0,
+            "zone": 1,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        }
+    ]
+}
