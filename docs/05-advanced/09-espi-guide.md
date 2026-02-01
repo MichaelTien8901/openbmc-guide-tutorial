@@ -42,44 +42,72 @@ eSPI (Enhanced Serial Peripheral Interface) is Intel's successor to LPC (Low Pin
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        eSPI Architecture                                     │
+│                        eSPI Architecture                                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
+│                                                                             │
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
-│   │                         Host (Intel/AMD PCH)                         │   │
-│   │                                                                      │   │
+│   │                         Host (Intel/AMD PCH)                        │   │
+│   │                                                                     │   │
 │   │   ┌──────────────────────────────────────────────────────────────┐  │   │
-│   │   │                    eSPI Controller (Master)                   │  │   │
+│   │   │                    eSPI Controller (Master)                  │  │   │
 │   │   └──────────────────────────────────────────────────────────────┘  │   │
-│   └──────────────────────────────┬───────────────────────────────────────┘   │
-│                                  │                                           │
+│   └──────────────────────────────┬──────────────────────────────────────┘   │
+│                                  │                                          │
 │            ┌─────────────────────┼─────────────────────┐                    │
 │            │                     │                     │                    │
 │         CS#│                  CLK│               IO[3:0]                    │
-│            │                     │              (Quad SPI)                   │
+│            │                     │              (Quad SPI)                  │
 │            │                     │                     │                    │
 │            │    Alert#           │      Reset#         │                    │
 │            │       │             │         │           │                    │
 │   ┌────────┴───────┴─────────────┴─────────┴───────────┴────────────────┐   │
-│   │                         eSPI Bus                                     │   │
+│   │                         eSPI Bus                                    │   │
 │   └────────┬───────┬─────────────┬─────────┬───────────┬────────────────┘   │
 │            │       │             │         │           │                    │
 │   ┌────────┴───────┴─────────────┴─────────┴───────────┴────────────────┐   │
-│   │                                                                      │   │
+│   │                                                                     │   │
 │   │   ┌──────────────────────────────────────────────────────────────┐  │   │
-│   │   │                    eSPI Controller (Slave)                    │  │   │
-│   │   │                                                               │  │   │
+│   │   │                    eSPI Controller (Slave)                   │  │   │
+│   │   │                                                              │  │   │
 │   │   │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ │  │   │
 │   │   │  │ Peripheral │ │  Virtual   │ │    OOB     │ │   Flash    │ │  │   │
 │   │   │  │  Channel   │ │   Wire     │ │  Message   │ │   Access   │ │  │   │
 │   │   │  │ (I/O,MMIO) │ │  Channel   │ │  Channel   │ │  Channel   │ │  │   │
 │   │   │  └────────────┘ └────────────┘ └────────────┘ └────────────┘ │  │   │
 │   │   └──────────────────────────────────────────────────────────────┘  │   │
-│   │                                                                      │   │
-│   │                    BMC (ASPEED AST2500/2600)                         │   │
-│   └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                              │
+│   │                                                                     │   │
+│   │                    BMC (ASPEED AST2500/2600)                        │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
+```
+```mermaid
+flowchart TB
+    subgraph Architecture["eSPI Architecture"]
+        direction TB
+        
+        subgraph Host["Host (Intel/AMD PCH)"]
+            MasterCtrl["eSPI Controller (Master)"]
+        end
+        
+        subgraph Bus["eSPI Bus"]
+            direction LR
+            Signals["CS# | CLK <br/>| IO[3:0] (Quad SPI) <br/>| Alert# | Reset#"]
+        end
+        
+        subgraph BMC["BMC (AST2500/2600)"]
+            subgraph SlaveCtrl["eSPI Controller (Slave)"]
+                direction TB
+                Peripheral["Peripheral<br/>Channel<br/>(I/O, MMIO)"]
+                VirtualWire["Virtual<br/>Wire<br/>Channel"]
+                OOB["OOB<br/>Message<br/>Channel"]
+                Flash["Flash<br/>Access<br/>Channel"]
+            end
+        end
+        
+        MasterCtrl <--> Bus
+        Bus <--> SlaveCtrl
+    end
 ```
 
 ### eSPI Channel Types
@@ -283,27 +311,27 @@ eSPI can provide UART functionality through the peripheral channel, replacing de
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    eSPI UART Flow                            │
+│                    eSPI UART Flow                           │
 ├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│   Host                                                       │
+│                                                             │
+│   Host                                                      │
 │   ┌─────────────────────────────────────────────────────┐   │
 │   │  Legacy COM Port (I/O 0x3F8)                        │   │
-│   │         │                                            │   │
-│   │         ▼                                            │   │
+│   │         │                                           │   │
+│   │         ▼                                           │   │
 │   │  eSPI Peripheral Channel (I/O Cycles)               │   │
 │   └─────────────────────────────────────────────────────┘   │
-│                           │                                  │
-│                    eSPI Bus                                  │
-│                           │                                  │
-│   BMC                     ▼                                  │
+│                           │                                 │
+│                    eSPI Bus                                 │
+│                           │                                 │
+│   BMC                     ▼                                 │
 │   ┌─────────────────────────────────────────────────────┐   │
 │   │  eSPI Peripheral Channel Decoder                    │   │
-│   │         │                                            │   │
-│   │         ▼                                            │   │
+│   │         │                                           │   │
+│   │         ▼                                           │   │
 │   │  Virtual UART (ttyS* or ttyVUART*)                  │   │
 │   └─────────────────────────────────────────────────────┘   │
-│                                                              │
+│                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -381,20 +409,20 @@ The OOB (Out-of-Band) Message Channel provides SMBus-like packet communication b
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    OOB Message Format                        │
+│                    OOB Message Format                       │
 ├─────────────────────────────────────────────────────────────┤
-│                                                              │
+│                                                             │
 │  ┌─────────┬─────────┬─────────┬─────────────┬───────────┐  │
 │  │  Cycle  │   Tag   │  Length │   Address   │  Data     │  │
 │  │  Type   │         │         │  (optional) │           │  │
 │  │ (1 byte)│(1 byte) │(2 bytes)│  (varies)   │ (varies)  │  │
 │  └─────────┴─────────┴─────────┴─────────────┴───────────┘  │
-│                                                              │
-│  Cycle Types:                                                │
+│                                                             │
+│  Cycle Types:                                               │
 │  - 0x21: OOB SMBus Write                                    │
 │  - 0x22: OOB SMBus Read                                     │
 │  - 0x23-0x27: Reserved/Vendor-specific                      │
-│                                                              │
+│                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -530,11 +558,11 @@ The Flash Access Channel enables the host to access SPI flash attached to the BM
 
 ### Flash Layout for eDAF
 
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │              Shared SPI Flash Layout (64MB example)         │
 ├─────────────────────────────────────────────────────────────┤
-│                                                             │
 │  Offset      │ Size   │ Region         │ Access             │
 │ ─────────────┼────────┼────────────────┼──────────────────  │
 │  0x00000000  │ 512KB  │ U-Boot         │ BMC only           │
