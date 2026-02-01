@@ -10,6 +10,10 @@ url: ""
 theme: just-the-docs
 color_scheme: dark
 
+# Mermaid diagrams
+mermaid:
+  version: "10.6.0"
+
 # Logo and favicon
 logo: "/assets/images/openbmc-logo.png"
 favicon_ico: "/assets/images/favicon.ico"
