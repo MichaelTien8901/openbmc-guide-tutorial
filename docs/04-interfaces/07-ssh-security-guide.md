@@ -62,7 +62,40 @@ OpenBMC uses **Dropbear** as its SSH server, a lightweight alternative to OpenSS
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+```mermaid
+flowchart LR
+    subgraph SSH_Architecture["SSH Architecture"]
+        
+        subgraph Client["SSH Client"]
+            client_desc["(ssh, PuTTY, scripts)"]
+        end
+        
+        Client -->|"TCP/22"| Dropbear
+        
+        subgraph Dropbear["Dropbear<br/>(SSH Server Daemon)"]
+            features["Features: SSH2, RSA/DSS/ECDSA, SCP, SFTP proxy"]
+        end
+        
+        Dropbear --> PAM
+        
+        subgraph PAM["PAM<br/>(Pluggable Authentication Modules)"]
+            direction TB
+            pam_unix["pam_unix"]
+            pam_ldap["pam_ldap"]
+            pam_tally2["pam_tally2"]
+            pam_limits["pam_limits"]
+        end
+        
+        PAM --> UserDB
+        
+        subgraph UserDB["User Database"]
+            db_desc["(/etc/passwd, /etc/shadow, LDAP)"]
+        end
+        
+    end
 
+
+```
 ---
 
 ## Setup & Configuration
@@ -788,40 +821,40 @@ This section provides detailed technical information for developers who want to 
 │  │                                                                        │ │
 │  │  3. Key Exchange (KEX)                                                 │ │
 │  │     ┌────────────────────────────────────────────────────────────────┐ │ │
-│  │     │  Client                        Server                         │ │ │
-│  │     │                                                               │ │ │
-│  │     │  SSH_MSG_KEXINIT ────────────> SSH_MSG_KEXINIT                │ │ │
-│  │     │  (supported algorithms)        (supported algorithms)         │ │ │
-│  │     │                                                               │ │ │
-│  │     │  KEX method: curve25519-sha256                                │ │ │
-│  │     │  Host key: ssh-ed25519                                        │ │ │
-│  │     │  Cipher: aes256-gcm@openssh.com                               │ │ │
-│  │     │  MAC: implicit (AEAD)                                         │ │ │
-│  │     │                                                               │ │ │
-│  │     │  ECDH_INIT ────────────────────> ECDH_REPLY                   │ │ │
-│  │     │  (client public key)            (server public key +          │ │ │
-│  │     │                                  host key signature)          │ │ │
-│  │     │                                                               │ │ │
-│  │     │  Verify host key against known_hosts                          │ │ │
-│  │     │  Derive session keys from shared secret                       │ │ │
-│  │     │                                                               │ │ │
-│  │     │  SSH_MSG_NEWKEYS ──────────────> SSH_MSG_NEWKEYS              │ │ │
-│  │     │  (encryption begins)             (encryption begins)          │ │ │
+│  │     │  Client                        Server                          │ │ │
+│  │     │                                                                │ │ │
+│  │     │  SSH_MSG_KEXINIT ────────────> SSH_MSG_KEXINIT                 │ │ │
+│  │     │  (supported algorithms)        (supported algorithms)          │ │ │
+│  │     │                                                                │ │ │
+│  │     │  KEX method: curve25519-sha256                                 │ │ │
+│  │     │  Host key: ssh-ed25519                                         │ │ │
+│  │     │  Cipher: aes256-gcm@openssh.com                                │ │ │
+│  │     │  MAC: implicit (AEAD)                                          │ │ │
+│  │     │                                                                │ │ │
+│  │     │  ECDH_INIT ────────────────────> ECDH_REPLY                    │ │ │
+│  │     │  (client public key)            (server public key +           │ │ │
+│  │     │                                  host key signature)           │ │ │
+│  │     │                                                                │ │ │
+│  │     │  Verify host key against known_hosts                           │ │ │
+│  │     │  Derive session keys from shared secret                        │ │ │
+│  │     │                                                                │ │ │
+│  │     │  SSH_MSG_NEWKEYS ──────────────> SSH_MSG_NEWKEYS               │ │ │
+│  │     │  (encryption begins)             (encryption begins)           │ │ │
 │  │     └────────────────────────────────────────────────────────────────┘ │ │
 │  │                                                                        │ │
 │  │  4. User Authentication                                                │ │
 │  │     ┌────────────────────────────────────────────────────────────────┐ │ │
-│  │     │  USERAUTH_REQUEST(username, "ssh-connection", method)         │ │ │
-│  │     │                                                               │ │ │
-│  │     │  Method: "publickey" (preferred)                              │ │ │
-│  │     │    - Client sends public key                                  │ │ │
-│  │     │    - Server checks ~/.ssh/authorized_keys                     │ │ │
-│  │     │    - Client proves possession of private key                  │ │ │
-│  │     │                                                               │ │ │
-│  │     │  Method: "password" (if enabled)                              │ │ │
-│  │     │    - PAM authentication (pam_unix, pam_ldap, etc.)            │ │ │
-│  │     │                                                               │ │ │
-│  │     │  USERAUTH_SUCCESS / USERAUTH_FAILURE                          │ │ │
+│  │     │  USERAUTH_REQUEST(username, "ssh-connection", method)          │ │ │
+│  │     │                                                                │ │ │
+│  │     │  Method: "publickey" (preferred)                               │ │ │
+│  │     │    - Client sends public key                                   │ │ │
+│  │     │    - Server checks ~/.ssh/authorized_keys                      │ │ │
+│  │     │    - Client proves possession of private key                   │ │ │
+│  │     │                                                                │ │ │
+│  │     │  Method: "password" (if enabled)                               │ │ │
+│  │     │    - PAM authentication (pam_unix, pam_ldap, etc.)             │ │ │
+│  │     │                                                                │ │ │
+│  │     │  USERAUTH_SUCCESS / USERAUTH_FAILURE                           │ │ │
 │  │     └────────────────────────────────────────────────────────────────┘ │ │
 │  │                                                                        │ │
 │  │  5. Channel Establishment                                              │ │
@@ -897,13 +930,13 @@ This section provides detailed technical information for developers who want to 
 │                                                                             │
 │  Control Flags:                                                             │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │  Flag        │ On Success        │ On Failure                         │ │
+│  │  Flag        │ On Success        │ On Failure                          │ │
 │  │  ────────────┼───────────────────┼──────────────────────────────────── │ │
-│  │  required    │ Continue          │ Continue, but fail eventually      │ │
-│  │  requisite   │ Continue          │ Return failure immediately         │ │
-│  │  sufficient  │ Return success    │ Continue                           │ │
-│  │  optional    │ Continue          │ Continue                           │ │
-│  │  [action=N]  │ Skip N rules      │ Custom action per result           │ │
+│  │  required    │ Continue          │ Continue, but fail eventually       │ │
+│  │  requisite   │ Continue          │ Return failure immediately          │ │
+│  │  sufficient  │ Return success    │ Continue                            │ │
+│  │  optional    │ Continue          │ Continue                            │ │
+│  │  [action=N]  │ Skip N rules      │ Custom action per result            │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1021,7 +1054,7 @@ This section provides detailed technical information for developers who want to 
 │  │  dropbearkey -t ecdsa -s 521 -f /etc/dropbear/dropbear_ecdsa_host_key  │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 │                                                                             │
-│  Dropbear Key File Format (internal):                                       │ │
+│  Dropbear Key File Format (internal):                                       │ 
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │  Not OpenSSH compatible - binary format specific to Dropbear           │ │
 │  │                                                                        │ │
