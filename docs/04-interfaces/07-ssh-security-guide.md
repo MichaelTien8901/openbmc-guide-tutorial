@@ -569,6 +569,189 @@ vi ~/.ssh/known_hosts
 
 ---
 
+## Using OpenSSH Instead of Dropbear
+
+While Dropbear is the default SSH server in OpenBMC, you can optionally use OpenSSH for environments requiring additional features or enterprise integration.
+
+### Switching to OpenSSH
+
+#### Build-Time Configuration
+
+```bitbake
+# In your machine .conf or local.conf
+
+# Remove Dropbear and add OpenSSH
+IMAGE_FEATURES += "ssh-server-openssh"
+IMAGE_FEATURES:remove = "ssh-server-dropbear"
+
+# Or manually in IMAGE_INSTALL
+IMAGE_INSTALL:remove = "dropbear"
+IMAGE_INSTALL:append = " openssh-server openssh-client openssh-sftp-server"
+```
+
+#### OpenSSH Configuration File
+
+Unlike Dropbear's command-line flags, OpenSSH uses `/etc/ssh/sshd_config`:
+
+```bash
+# /etc/ssh/sshd_config
+
+# Security settings
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+PubkeyAuthentication yes
+PermitEmptyPasswords no
+
+# Connection settings
+Port 22
+AddressFamily any
+ListenAddress 0.0.0.0
+
+# Timeout and limits
+ClientAliveInterval 300
+ClientAliveCountMax 3
+MaxAuthTries 3
+MaxSessions 10
+
+# Disable unnecessary features
+X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+
+# Logging
+SyslogFacility AUTH
+LogLevel INFO
+
+# Allowed users (optional)
+AllowUsers root admin operator
+```
+
+#### Runtime Management
+
+```bash
+# Check OpenSSH status
+systemctl status sshd
+
+# Restart after config changes
+systemctl restart sshd
+
+# Test configuration before restart
+sshd -t
+
+# View logs
+journalctl -u sshd
+```
+
+### Pros and Cons Comparison
+
+#### Dropbear Advantages
+
+| Advantage | Description |
+|-----------|-------------|
+| **Smaller footprint** | ~110KB binary vs ~900KB for OpenSSH; critical for flash-constrained BMCs |
+| **Lower memory usage** | Uses less RAM per connection; important for BMCs with limited memory (typically 256-512MB) |
+| **Faster startup** | Quicker service initialization; relevant for BMC boot time |
+| **Simpler configuration** | Command-line flags are straightforward for basic setups |
+| **Battle-tested in embedded** | Widely used in routers, IoT, and embedded Linux systems |
+| **Default in OpenBMC** | Well-integrated and tested with the OpenBMC ecosystem |
+
+#### Dropbear Disadvantages
+
+| Disadvantage | Description |
+|--------------|-------------|
+| **Limited features** | No Match blocks, no chroot, limited forwarding options |
+| **No sshd_config** | Configuration via flags can be awkward for complex setups |
+| **Fewer cipher options** | Smaller set of supported algorithms |
+| **Limited logging** | Less detailed audit logging compared to OpenSSH |
+| **No certificate authentication** | Does not support OpenSSH certificate-based auth |
+
+#### OpenSSH Advantages
+
+| Advantage | Description |
+|-----------|-------------|
+| **Rich feature set** | Full SSH specification support including all forwarding modes |
+| **Flexible configuration** | `/etc/ssh/sshd_config` with Match blocks for per-user/host settings |
+| **Certificate authentication** | Supports SSH certificates for scalable key management |
+| **Chroot/SFTP jail** | Built-in chroot support for restricted SFTP-only users |
+| **Extensive logging** | Detailed audit logs for compliance requirements |
+| **Wider compatibility** | Better interoperability with enterprise SSH clients and tools |
+| **Active development** | Frequent security updates from OpenBSD team |
+| **FIDO2/U2F support** | Hardware security key authentication |
+
+#### OpenSSH Disadvantages
+
+| Disadvantage | Description |
+|--------------|-------------|
+| **Larger size** | ~900KB binary; may be problematic for space-constrained BMCs |
+| **Higher memory usage** | More RAM per connection (~1-2MB vs ~100KB for Dropbear) |
+| **More complex** | Configuration file can be overwhelming for simple use cases |
+| **Not OpenBMC default** | May require additional testing and validation |
+| **Slower startup** | Slightly longer service initialization time |
+
+### When to Use Each
+
+#### Choose Dropbear When
+
+- Flash storage is limited (< 32MB)
+- Memory is constrained (< 256MB)
+- Simple SSH access is sufficient
+- Using standard OpenBMC configuration
+- Boot time is critical
+- No enterprise compliance requirements
+
+#### Choose OpenSSH When
+
+- Enterprise security compliance required (SOX, PCI-DSS, HIPAA)
+- Need SSH certificate authentication for fleet management
+- Require detailed audit logging
+- Need chroot/jail for restricted users
+- Using FIDO2/hardware security keys
+- Advanced features like Match blocks needed
+- Integrating with enterprise identity management
+
+### OpenSSH Hardening Recipe
+
+```bitbake
+# recipes-connectivity/openssh/openssh_%.bbappend
+
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+
+SRC_URI += " \
+    file://sshd_config \
+    file://ssh_host_ed25519_key \
+    file://ssh_host_ed25519_key.pub \
+"
+
+do_install:append() {
+    # Install hardened sshd_config
+    install -m 0644 ${WORKDIR}/sshd_config ${D}${sysconfdir}/ssh/sshd_config
+
+    # Install pre-generated host keys (for consistent fingerprint)
+    install -m 0600 ${WORKDIR}/ssh_host_ed25519_key ${D}${sysconfdir}/ssh/
+    install -m 0644 ${WORKDIR}/ssh_host_ed25519_key.pub ${D}${sysconfdir}/ssh/
+
+    # Remove weak key types
+    rm -f ${D}${sysconfdir}/ssh/ssh_host_dsa_key*
+}
+```
+
+### Migration Checklist
+
+When switching from Dropbear to OpenSSH:
+
+- [ ] Back up existing host keys and authorized_keys
+- [ ] Update Yocto configuration to include OpenSSH
+- [ ] Create and test sshd_config
+- [ ] Regenerate or convert host keys
+- [ ] Test authentication methods (password, key)
+- [ ] Verify PAM integration works correctly
+- [ ] Test SFTP functionality
+- [ ] Update firewall rules if port changed
+- [ ] Document the change for operations team
+- [ ] Update monitoring/alerting for new service name (sshd vs dropbear)
+
+---
+
 ## References
 
 - [Dropbear SSH](https://matt.ucc.asn.au/dropbear/dropbear.html)
