@@ -680,5 +680,319 @@ dmesg | tail -20
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for hwmon sensor developers.
+
+### Hwmon Sysfs Attribute Lifecycle
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                    Hwmon Device Registration Flow                          │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  I2C Device Probe                                                          │
+│        │                                                                   │
+│        v                                                                   │
+│  ┌─────────────────┐                                                       │
+│  │ tmp75_probe()   │  Driver probes I2C device                             │
+│  │                 │                                                       │
+│  │ 1. i2c_smbus_   │                                                       │
+│  │    read_byte()  │  Verify device responds                               │
+│  │                 │                                                       │
+│  │ 2. Allocate     │                                                       │
+│  │    driver data  │                                                       │
+│  └────────┬────────┘                                                       │
+│           │                                                                │
+│           v                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │              devm_hwmon_device_register_with_info()                 │   │
+│  │                                                                     │   │
+│  │  Parameters:                                                        │   │
+│  │    - dev: parent device (i2c_client)                                │   │
+│  │    - name: "tmp75"                                                  │   │
+│  │    - drvdata: driver private data                                   │   │
+│  │    - chip: hwmon_chip_info structure                                │   │
+│  │    - extra_groups: additional sysfs groups (optional)               │   │
+│  └────────────────────────────┬────────────────────────────────────────┘   │
+│                               │                                            │
+│                               v                                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                   Hwmon Core Processing                             │   │
+│  │                                                                     │   │
+│  │  1. Allocate hwmon_device                                           │   │
+│  │  2. Assign hwmonN name (hwmon0, hwmon1, ...)                        │   │
+│  │  3. Create sysfs directory:                                         │   │
+│  │     /sys/class/hwmon/hwmonN/                                        │   │
+│  │  4. Create standard attributes:                                     │   │
+│  │     - name (device name)                                            │   │
+│  │     - device -> symlink to parent                                   │   │
+│  │  5. Create channel attributes from hwmon_chip_info:                 │   │
+│  │     - temp1_input, temp1_max, temp1_min, ...                        │   │
+│  │  6. Add device to hwmon class                                       │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                               │                                            │
+│                               v                                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                 Sysfs Attribute Access                              │   │
+│  │                                                                     │   │
+│  │  User reads /sys/class/hwmon/hwmon0/temp1_input                     │   │
+│  │        │                                                            │   │
+│  │        v                                                            │   │
+│  │  hwmon_attr_show()                                                  │   │
+│  │        │                                                            │   │
+│  │        v                                                            │   │
+│  │  chip->ops->read(dev, hwmon_temp, hwmon_temp_input, channel, &val)  │   │
+│  │        │                                                            │   │
+│  │        v                                                            │   │
+│  │  Driver's read function (e.g., tmp75_read())                        │   │
+│  │        │                                                            │   │
+│  │        v                                                            │   │
+│  │  i2c_smbus_read_word_data() → returns millidegrees                  │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Hwmon Channel Configuration
+
+```c
+/* Driver hwmon_chip_info structure example (simplified tmp75) */
+
+static const u32 tmp75_temp_config[] = {
+    HWMON_T_INPUT | HWMON_T_MAX | HWMON_T_MIN | HWMON_T_MAX_HYST,
+    0  /* Terminator */
+};
+
+static const struct hwmon_channel_info tmp75_temp = {
+    .type = hwmon_temp,
+    .config = tmp75_temp_config,
+};
+
+static const struct hwmon_channel_info *tmp75_info[] = {
+    &tmp75_temp,
+    NULL  /* Terminator */
+};
+
+static const struct hwmon_ops tmp75_hwmon_ops = {
+    .is_visible = tmp75_is_visible,  /* Which attrs are visible */
+    .read = tmp75_read,               /* Read attribute value */
+    .write = tmp75_write,             /* Write attribute value */
+};
+
+static const struct hwmon_chip_info tmp75_chip_info = {
+    .ops = &tmp75_hwmon_ops,
+    .info = tmp75_info,
+};
+
+/* Attribute flag meanings:
+ * HWMON_T_INPUT     -> temp1_input     (current reading)
+ * HWMON_T_MAX       -> temp1_max       (high threshold)
+ * HWMON_T_MIN       -> temp1_min       (low threshold)
+ * HWMON_T_MAX_HYST  -> temp1_max_hyst  (hysteresis)
+ * HWMON_T_CRIT      -> temp1_crit      (critical threshold)
+ * HWMON_T_LABEL     -> temp1_label     (sensor name)
+ */
+```
+
+### Phosphor-Hwmon Sysfs Matching Algorithm
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                 Phosphor-Hwmon Device Discovery                            │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  1. SYSTEMD SERVICE INSTANTIATION                                          │
+│     ─────────────────────────────                                          │
+│     xyz.openbmc_project.Hwmon@ahb--apb--bus@1e78a000--i2c-bus@80--tmp75@48  │
+│                                                                            │
+│     Instance name encodes device tree path:                                │
+│       / → --                                                               │
+│       @ → @                                                                │
+│                                                                            │
+│  2. DEVICE PATH RESOLUTION                                                 │
+│     ───────────────────────                                                │
+│     Instance: ahb--apb--bus@1e78a000--i2c-bus@80--tmp75@48                  │
+│          │                                                                 │
+│          v                                                                 │
+│     /sys/firmware/devicetree/base/ahb/apb/bus@1e78a000/i2c-bus@80/tmp75@48 │
+│          │                                                                 │
+│          v                                                                 │
+│     Find symlink in /sys/bus/i2c/devices/                                  │
+│     → 1-0048 (bus 1, address 0x48)                                         │
+│          │                                                                 │
+│          v                                                                 │
+│     /sys/bus/i2c/devices/1-0048/hwmon/hwmon3/                              │
+│                                                                            │
+│  3. CONFIGURATION FILE LOOKUP                                              │
+│     ──────────────────────────                                             │
+│     Search order:                                                          │
+│       1. /etc/default/obmc/hwmon/<instance>.conf                           │
+│       2. /usr/share/phosphor-hwmon/<instance>.conf                         │
+│                                                                            │
+│     Config content:                                                        │
+│       LABEL_temp1=ambient_temp                                             │
+│       WARNHI_temp1=40000                                                   │
+│       CRITHI_temp1=45000                                                   │
+│                                                                            │
+│  4. D-BUS OBJECT CREATION                                                  │
+│     ────────────────────────                                               │
+│     Path: /xyz/openbmc_project/sensors/temperature/ambient_temp            │
+│     Interfaces:                                                            │
+│       - xyz.openbmc_project.Sensor.Value                                   │
+│       - xyz.openbmc_project.Sensor.Threshold.Warning                       │
+│       - xyz.openbmc_project.Sensor.Threshold.Critical                      │
+│       - xyz.openbmc_project.State.Decorator.OperationalStatus              │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Dbus-Sensors HwmonTempSensor Processing Pipeline
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                  HwmonTempSensor Processing Flow                           │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  ENTITY MANAGER SIGNAL                                                     │
+│  ─────────────────────                                                     │
+│        │                                                                   │
+│        v                                                                   │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  createSensors() callback triggered                                 │   │
+│  │                                                                     │   │
+│  │  1. Query ObjectMapper for Entity Manager configurations            │   │
+│  │  2. Filter for supported sensor types (TMP75, LM75A, etc.)          │   │
+│  │  3. Extract Bus, Address, Name from configuration                   │   │
+│  └────────────────────────┬────────────────────────────────────────────┘   │
+│                           │                                                │
+│                           v                                                │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  findHwmonPath(bus, address)                                        │   │
+│  │                                                                     │   │
+│  │  Search algorithm:                                                  │   │
+│  │    for each /sys/bus/i2c/devices/<bus>-<addr>/hwmon/hwmon*/         │   │
+│  │      check name matches expected driver                             │   │
+│  │      verify temp*_input exists                                      │   │
+│  │      return path on match                                           │   │
+│  │                                                                     │   │
+│  │  Result: /sys/class/hwmon/hwmon3/temp1_input                        │   │
+│  └────────────────────────┬────────────────────────────────────────────┘   │
+│                           │                                                │
+│                           v                                                │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  HwmonTempSensor object construction                                │   │
+│  │                                                                     │   │
+│  │  sensor = std::make_shared<HwmonTempSensor>(                        │   │
+│  │      hwmonPath,                 // "/sys/class/hwmon/hwmon3"        │   │
+│  │      sensorType,                // "TMP75"                          │   │
+│  │      objectServer,              // D-Bus object server              │   │
+│  │      dbusConnection,            // D-Bus connection                 │   │
+│  │      name,                      // "Ambient_Temp"                   │   │
+│  │      thresholds,                // vector of threshold configs      │   │
+│  │      pollRate,                  // 1.0 seconds                      │   │
+│  │      powerState                 // "Always"                         │   │
+│  │  );                                                                 │   │
+│  └────────────────────────┬────────────────────────────────────────────┘   │
+│                           │                                                │
+│                           v                                                │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  setupRead() - Initialize polling                                   │   │
+│  │                                                                     │   │
+│  │  1. Open file descriptor for temp1_input                            │   │
+│  │  2. Set up boost::asio::posix::stream_descriptor                    │   │
+│  │  3. Start async_wait timer for polling                              │   │
+│  │                                                                     │   │
+│  │  Poll cycle:                                                        │   │
+│  │    waitTimer.expires_after(pollRate)                                │   │
+│  │    waitTimer.async_wait([this] {                                    │   │
+│  │        handleResponse();  // Read and process                       │   │
+│  │    });                                                              │   │
+│  └────────────────────────┬────────────────────────────────────────────┘   │
+│                           │                                                │
+│                           v                                                │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  handleResponse() - Process reading                                 │   │
+│  │                                                                     │   │
+│  │  1. lseek(fd, 0, SEEK_SET)         // Reset to start                │   │
+│  │  2. read(fd, buffer, size)         // Read raw value                │   │
+│  │  3. value = atof(buffer) / 1000.0  // Convert millidegrees          │   │
+│  │  4. updateValue(value)             // Update D-Bus + thresholds     │   │
+│  │  5. Schedule next read                                              │   │
+│  │                                                                     │   │
+│  │  updateValue() triggers:                                            │   │
+│  │    - D-Bus property change signal                                   │   │
+│  │    - Threshold crossing check                                       │   │
+│  │    - SEL entry generation if threshold crossed                      │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Threshold Hysteresis Implementation
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                  Threshold Crossing with Hysteresis                        │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  Temperature                                                               │
+│      ^                                                                     │
+│      │                                                                     │
+│  95° ├─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  Critical High                 │
+│      │                    ╱ ╲                                              │
+│  92° ├─ ─ ─ ─ ─ ─ ─ ─ ─ ─╱─ ─╲─ ─ ─ ─ ─ ─ ─  Crit High - Hysteresis        │
+│      │                  ╱     ╲                                            │
+│  85° ├─ ─ ─ ─ ─ ─ ─ ─  ╱─ ─ ─ ─╲─ ─ ─ ─ ─ ─  Warning High                  │
+│      │                ╱         ╲                                          │
+│  82° ├─ ─ ─ ─ ─ ─ ─ ─╱─ ─ ─ ─ ─ ─╲─ ─ ─ ─ ─  Warn High - Hysteresis        │
+│      │              ╱             ╲                                        │
+│  70° ├─────────────╱───────────────╲───────  Normal Operation              │
+│      │            ╱                 ╲                                      │
+│      │           ╱                   ╲                                     │
+│      └──────────────────────────────────────> Time                         │
+│                                                                            │
+│  THRESHOLD STATE MACHINE:                                                  │
+│                                                                            │
+│   ┌──────────┐    value > threshold     ┌──────────┐                       │
+│   │  Normal  │ ────────────────────────>│ Asserted │                       │
+│   │          │                          │          │                       │
+│   │ alarm=   │<─────────────────────────│ alarm=   │                       │
+│   │ false    │  value < (thresh - hyst) │ true     │                       │
+│   └──────────┘                          └──────────┘                       │
+│                                                                            │
+│  Example with 3°C hysteresis:                                              │
+│    - Warning asserts when temp > 85°C                                      │
+│    - Warning deasserts when temp < 82°C (85 - 3)                           │
+│    - Prevents oscillation when temp hovers near threshold                  │
+│                                                                            │
+│  Code pattern (from thresholds.cpp):                                       │
+│                                                                            │
+│    if (!asserted && value > threshold) {                                   │
+│        asserted = true;                                                    │
+│        logThresholdCrossing(/* assert */);                                 │
+│    } else if (asserted && value < (threshold - hysteresis)) {              │
+│        asserted = false;                                                   │
+│        logThresholdCrossing(/* deassert */);                               │
+│    }                                                                       │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files in [dbus-sensors](https://github.com/openbmc/dbus-sensors) and [phosphor-hwmon](https://github.com/openbmc/phosphor-hwmon):
+
+| File | Description |
+|------|-------------|
+| `dbus-sensors/src/HwmonTempSensor.cpp` | Temperature sensor implementation with sysfs polling |
+| `dbus-sensors/src/Thresholds.cpp` | Threshold crossing detection with hysteresis |
+| `dbus-sensors/src/Utils.cpp` | Hwmon path discovery and Entity Manager query |
+| `phosphor-hwmon/mainloop.cpp` | Main sensor reading loop for legacy hwmon |
+| `phosphor-hwmon/sysfs.cpp` | Sysfs attribute reading and parsing |
+| `phosphor-hwmon/env.cpp` | Configuration file parsing (LABEL_, WARNHI_, etc.) |
+
+---
+
 {: .note }
 **Tested on**: OpenBMC master, QEMU romulus

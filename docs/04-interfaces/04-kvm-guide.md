@@ -425,6 +425,338 @@ systemctl start obmc-ikvm
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for KVM developers.
+
+### Video Capture Pipeline
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                      Video Capture Processing Pipeline                     │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  HOST VGA OUTPUT                                                           │
+│  ───────────────                                                           │
+│        │                                                                   │
+│        │ Analog VGA signals (R, G, B, HSync, VSync)                        │
+│        v                                                                   │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  ASPEED Video Engine (AST2500/2600)                                 │   │
+│  │                                                                     │   │
+│  │  1. ADC Capture                                                     │   │
+│  │     ─────────────                                                   │   │
+│  │     VGA signals → 10-bit ADC sampling                               │   │
+│  │     Sync detection → resolution/timing auto-detect                  │   │
+│  │                                                                     │   │
+│  │  2. Frame Buffer                                                    │   │
+│  │     ────────────                                                    │   │
+│  │     Raw pixels → Video memory (shared with ARM)                     │   │
+│  │     Format: RGB565 or RGB888                                        │   │
+│  │     Memory region: /dev/mem or videobuf2                            │   │
+│  │                                                                     │   │
+│  │  3. Hardware JPEG Encoder (Optional)                                │   │
+│  │     ────────────────────────────────                                │   │
+│  │     Full frame → DCT → Quantization → Huffman → JPEG stream         │   │
+│  │     Or: Software compression via libjpeg-turbo                      │   │
+│  └────────────────────────────────────────────────────────────────────-┘   │
+│        │                                                                   │
+│        │ /dev/video0 (V4L2 interface)                                      │
+│        v                                                                   │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  obmc-ikvm Video Processing                                         │   │
+│  │                                                                     │   │
+│  │  Frame Capture Loop:                                                │   │
+│  │  ─────────────────────                                              │   │
+│  │  while (running) {                                                  │   │
+│  │      // 1. Dequeue buffer from V4L2                                 │   │
+│  │      ioctl(fd, VIDIOC_DQBUF, &buf);                                 │   │
+│  │                                                                     │   │
+│  │      // 2. Check for frame changes (dirty detection)                │   │
+│  │      if (memcmp(current_frame, last_frame, size) != 0) {            │   │
+│  │          // 3. Compress changed regions                             │   │
+│  │          jpeg_data = compress_jpeg(current_frame, quality);         │   │
+│  │                                                                     │   │
+│  │          // 4. Send via RFB protocol                                │   │
+│  │          send_rfb_update(jpeg_data);                                │   │
+│  │      }                                                              │   │
+│  │                                                                     │   │
+│  │      // 5. Requeue buffer                                           │   │
+│  │      ioctl(fd, VIDIOC_QBUF, &buf);                                  │   │
+│  │  }                                                                  │   │
+│  │                                                                     │   │
+│  │  Compression Options:                                               │   │
+│  │    - JPEG (quality 10-100, typical 50-80)                           │   │
+│  │    - Raw (no compression, high bandwidth)                           │   │
+│  │    - Tight encoding with zlib                                       │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### RFB (VNC) Protocol Frame Updates
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                        RFB Protocol Frame Updates                          │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  VNC (RFB) PROTOCOL MESSAGE FLOW                                           │
+│  ───────────────────────────────                                           │
+│                                                                            │
+│  Client (noVNC)                            Server (obmc-ikvm)              │
+│       │                                           │                        │
+│       │  FramebufferUpdateRequest                 │                        │
+│       │  ┌─────────────────────────┐              │                        │
+│       │  │ message-type: 3         │              │                        │
+│       │  │ incremental: 1          │              │                        │
+│       │  │ x: 0, y: 0              │              │                        │
+│       │  │ width: 1920             │              │                        │
+│       │  │ height: 1080            │              │                        │
+│       │  └─────────────────────────┘              │                        │
+│       │────────────────────────────────────────-->│                        │
+│       │                                           │                        │
+│       │                                           │ Capture frame          │
+│       │                                           │ Detect changes         │
+│       │                                           │ Compress regions       │
+│       │                                           │                        │
+│       │              FramebufferUpdate            │                        │
+│       │  ┌─────────────────────────────────────┐  │                        │
+│       │  │ message-type: 0                     │  │                        │
+│       │  │ number-of-rectangles: 2             │  │                        │
+│       │  │                                     │  │                        │
+│       │  │ Rectangle 1 (changed region):       │  │                        │
+│       │  │   x: 100, y: 200                    │  │                        │
+│       │  │   width: 400, height: 300           │  │                        │
+│       │  │   encoding: JPEG (21)               │  │                        │
+│       │  │   data: [compressed JPEG bytes]     │  │                        │
+│       │  │                                     │  │                        │
+│       │  │ Rectangle 2 (cursor update):        │  │                        │
+│       │  │   encoding: Cursor (-239)           │  │                        │
+│       │  │   data: [cursor bitmap + mask]      │  │                        │
+│       │  └─────────────────────────────────────┘  │                        │
+│       │<──────────────────────────────────────────│                        │
+│       │                                           │                        │
+│                                                                            │
+│  ENCODING TYPES SUPPORTED:                                                 │
+│  ─────────────────────────                                                 │
+│                                                                            │
+│  │ Encoding    │ ID   │ Description                              │         │
+│  │─────────────│──────│──────────────────────────────────────────│         │
+│  │ Raw         │ 0    │ Uncompressed pixels (RGB888/RGB565)      │         │
+│  │ CopyRect    │ 1    │ Copy from another screen region          │         │
+│  │ RRE         │ 2    │ Rise and Run length Encoding             │         │
+│  │ Hextile     │ 5    │ 16x16 tile-based compression             │         │
+│  │ ZRLE        │ 16   │ Zlib Run-Length Encoding                 │         │
+│  │ Tight       │ 7    │ Tight compression with JPEG option       │         │
+│  │ JPEG        │ 21   │ JPEG-compressed rectangle                │         │
+│  │ Cursor      │ -239 │ Client-side cursor rendering             │         │
+│  │ DesktopSize │ -223 │ Desktop size change notification         │         │
+│                                                                            │
+│  TIGHT ENCODING WITH JPEG (commonly used):                                 │
+│  ─────────────────────────────────────────                                 │
+│                                                                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  Tight Compression Control Byte:                                    │   │
+│  │  ┌───┬───┬───┬───┬───┬───┬───┬───┐                                  │   │
+│  │  │ 7 │ 6 │ 5 │ 4 │ 3 │ 2 │ 1 │ 0 │                                  │   │
+│  │  └───┴───┴───┴───┴───┴───┴───┴───┘                                  │   │
+│  │    │   │   │   │   │   └───┴───┴─── zlib stream reset flags         │   │
+│  │    │   │   │   └───┴────────────── fill mode / filter               │   │
+│  │    └───┴───┴────────────────────── compression type                 │   │
+│  │         0x09 = JPEG compression                                     │   │
+│  │         0x00-0x07 = Basic compression                               │   │
+│  │                                                                     │   │
+│  │  JPEG Quality Level:                                                │   │
+│  │    -23 to -32 pseudo-encoding sets quality 0-9 (maps to 5-95%)      │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### USB HID Gadget Protocol
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                        USB HID Gadget Implementation                       │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  USB HID GADGET SETUP                                                      │
+│  ────────────────────                                                      │
+│                                                                            │
+│  /sys/kernel/config/usb_gadget/kvm_gadget/                                 │
+│  ├── idVendor              # 0x1d6b (Linux Foundation)                     │
+│  ├── idProduct             # 0x0104 (Multifunction Composite Gadget)       │
+│  ├── bcdDevice             # 0x0100                                        │
+│  ├── bcdUSB                # 0x0200 (USB 2.0)                              │
+│  ├── strings/0x409/                                                        │
+│  │   ├── serialnumber      # BMC serial                                    │
+│  │   ├── manufacturer      # OpenBMC                                       │
+│  │   └── product           # Virtual KVM                                   │
+│  ├── configs/c.1/                                                          │
+│  │   ├── MaxPower          # 500 (mA)                                      │
+│  │   ├── hid.keyboard -> functions/hid.keyboard                            │
+│  │   └── hid.mouse -> functions/hid.mouse                                  │
+│  └── functions/                                                            │
+│      ├── hid.keyboard/                                                     │
+│      │   ├── protocol      # 1 (Keyboard)                                  │
+│      │   ├── subclass      # 1 (Boot Interface)                            │
+│      │   ├── report_length # 8                                             │
+│      │   └── report_desc   # HID Report Descriptor (binary)                │
+│      └── hid.mouse/                                                        │
+│          ├── protocol      # 2 (Mouse)                                     │
+│          ├── subclass      # 1 (Boot Interface)                            │
+│          ├── report_length # 6                                             │
+│          └── report_desc   # HID Report Descriptor (binary)                │
+│                                                                            │
+│  KEYBOARD HID REPORT FORMAT (8 bytes):                                     │
+│  ─────────────────────────────────────                                     │
+│                                                                            │
+│  ┌─────────┬─────────┬────────┬────────┬────────┬────────┬────────┬────────┐
+│  │ Byte 0  │ Byte 1  │ Byte 2 │ Byte 3 │ Byte 4 │ Byte 5 │ Byte 6 │ Byte 7 │
+│  ├─────────┼─────────┼────────┼────────┼────────┼────────┼────────┼────────┤
+│  │Modifier │Reserved │ Key 1  │ Key 2  │ Key 3  │ Key 4  │ Key 5  │ Key 6  │
+│  │ Flags   │  (0x00) │        │        │        │        │        │        │
+│  └─────────┴─────────┴────────┴────────┴────────┴────────┴────────┴────────┘
+│                                                                            │
+│  Modifier Flags (Byte 0):                                                  │
+│    Bit 0: Left Ctrl     Bit 4: Right Ctrl                                  │
+│    Bit 1: Left Shift    Bit 5: Right Shift                                 │
+│    Bit 2: Left Alt      Bit 6: Right Alt                                   │
+│    Bit 3: Left GUI      Bit 7: Right GUI (Windows key)                     │
+│                                                                            │
+│  Example: Ctrl+Alt+Delete                                                  │
+│    [0x05, 0x00, 0x4C, 0x00, 0x00, 0x00, 0x00, 0x00]                        │
+│    0x05 = Left Ctrl (0x01) + Left Alt (0x04)                               │
+│    0x4C = Delete key scancode                                              │
+│                                                                            │
+│  MOUSE HID REPORT FORMAT (6 bytes - Absolute):                             │
+│  ────────────────────────────────────────────                              │
+│                                                                            │
+│  ┌─────────┬─────────┬─────────┬─────────┬─────────┬─────────┐             │
+│  │ Byte 0  │ Byte 1  │ Byte 2  │ Byte 3  │ Byte 4  │ Byte 5  │             │
+│  ├─────────┼─────────┼─────────┼─────────┼─────────┼─────────┤             │
+│  │ Buttons │  X Low  │ X High  │  Y Low  │ Y High  │ Wheel   │             │
+│  └─────────┴─────────┴─────────┴─────────┴─────────┴─────────┘             │
+│                                                                            │
+│  Buttons (Byte 0):                                                         │
+│    Bit 0: Left button    Bit 2: Middle button                              │
+│    Bit 1: Right button   Bits 3-7: Reserved                                │
+│                                                                            │
+│  X/Y: 16-bit absolute position (0-32767 maps to screen)                    │
+│  Wheel: Signed 8-bit scroll delta                                          │
+│                                                                            │
+│  WRITING TO HID DEVICE:                                                    │
+│  ──────────────────────                                                    │
+│                                                                            │
+│  // Send keyboard report                                                   │
+│  int fd = open("/dev/hidg0", O_WRONLY);                                    │
+│  uint8_t report[8] = {0x05, 0, 0x4C, 0, 0, 0, 0, 0};  // Ctrl+Alt+Del      │
+│  write(fd, report, sizeof(report));                                        │
+│                                                                            │
+│  // Key release                                                            │
+│  memset(report, 0, sizeof(report));                                        │
+│  write(fd, report, sizeof(report));                                        │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### WebSocket to VNC Bridge
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                    bmcweb KVM WebSocket Implementation                     │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  WEBSOCKET CONNECTION ESTABLISHMENT                                        │
+│  ─────────────────────────────────                                         │
+│                                                                            │
+│  Browser                      bmcweb                      obmc-ikvm        │
+│     │                           │                             │            │
+│     │  GET /kvm/0               │                             │            │
+│     │  Upgrade: websocket       │                             │            │
+│     │  Sec-WebSocket-Protocol:  │                             │            │
+│     │    binary                 │                             │            │
+│     │──────────────────────────>│                             │            │
+│     │                           │                             │            │
+│     │  HTTP/1.1 101 Switching   │                             │            │
+│     │  Connection: Upgrade      │                             │            │
+│     │  Sec-WebSocket-Accept:    │                             │            │
+│     │    [calculated hash]      │                             │            │
+│     │<──────────────────────────│                             │            │
+│     │                           │                             │            │
+│     │  [WebSocket Binary Frame] │  Unix Socket                │            │
+│     │  RFB Protocol Version     │  /var/run/obmc-ikvm.sock    │            │
+│     │<─────────────────────────>│<───────────────────────────>│            │
+│     │                           │                             │            │
+│                                                                            │
+│  BMCWEB KVM HANDLER (kvm.hpp):                                             │
+│  ─────────────────────────────                                             │
+│                                                                            │
+│  void handleKvmWebSocket(crow::websocket::Connection& conn) {              │
+│      // 1. Connect to obmc-ikvm Unix socket                                │
+│      int sock = socket(AF_UNIX, SOCK_STREAM, 0);                           │
+│      struct sockaddr_un addr;                                              │
+│      addr.sun_family = AF_UNIX;                                            │
+│      strncpy(addr.sun_path, "/var/run/obmc-ikvm.sock", sizeof(...));       │
+│      connect(sock, (struct sockaddr*)&addr, sizeof(addr));                 │
+│                                                                            │
+│      // 2. Bidirectional forwarding                                        │
+│      // WebSocket → Unix socket (client input)                             │
+│      conn.onMessage([sock](const std::string& msg) {                       │
+│          write(sock, msg.data(), msg.size());                              │
+│      });                                                                   │
+│                                                                            │
+│      // Unix socket → WebSocket (video/responses)                          │
+│      async_read(sock, buffer, [&conn](size_t bytes) {                      │
+│          conn.sendBinary(buffer, bytes);                                   │
+│      });                                                                   │
+│  }                                                                         │
+│                                                                            │
+│  DATA FLOW:                                                                │
+│  ─────────                                                                 │
+│                                                                            │
+│  ┌──────────┐      ┌──────────┐      ┌──────────┐      ┌──────────┐        │
+│  │  noVNC   │      │  bmcweb  │      │obmc-ikvm │      │   Host   │        │
+│  │(browser) │      │          │      │          │      │          │        │
+│  └────┬─────┘      └────┬─────┘      └────┬─────┘      └────┬─────┘        │
+│       │                 │                 │                 │              │
+│       │  KeyEvent       │                 │                 │              │
+│       │  (RFB msg)      │                 │                 │              │
+│       │────────────────>│────────────────>│                 │              │
+│       │   WebSocket     │  Unix socket    │  write()        │              │
+│       │   binary frame  │                 │  /dev/hidg0     │              │
+│       │                 │                 │────────────────>│              │
+│       │                 │                 │   USB HID       │              │
+│       │                 │                 │   report        │              │
+│       │                 │                 │                 │              │
+│       │                 │                 │  Video capture  │              │
+│       │                 │                 │<────────────────│              │
+│       │                 │                 │   V4L2 frame    │              │
+│       │  FramebufferUp  │                 │                 │              │
+│       │<────────────────│<────────────────│                 │              │
+│       │   WebSocket     │  Unix socket    │                 │              │
+│       │   binary frame  │  (JPEG data)    │                 │              │
+│       │                 │                 │                 │              │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files in [obmc-ikvm](https://github.com/openbmc/obmc-ikvm) and [bmcweb](https://github.com/openbmc/bmcweb):
+
+| File | Description |
+|------|-------------|
+| `obmc-ikvm/ikvm_video.cpp` | V4L2 video capture and JPEG compression |
+| `obmc-ikvm/ikvm_input.cpp` | USB HID gadget keyboard/mouse handling |
+| `obmc-ikvm/ikvm_server.cpp` | RFB/VNC protocol server implementation |
+| `bmcweb/include/kvm_websocket.hpp` | WebSocket to Unix socket bridge |
+| `bmcweb/redfish-core/lib/managers.hpp` | GraphicalConsole Redfish resource |
+
+---
+
 ## References
 
 - [obmc-ikvm](https://github.com/openbmc/obmc-ikvm)
