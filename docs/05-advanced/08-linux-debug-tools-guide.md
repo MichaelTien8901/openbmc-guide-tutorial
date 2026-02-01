@@ -1077,6 +1077,277 @@ CONFIG_KASAN_GENERIC=y
 
 ---
 
+## Deep Dive
+
+This section provides detailed technical information for developers who want to understand how sanitizers and debugging tools work internally.
+
+### AddressSanitizer Memory Layout
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    ASan Shadow Memory Architecture                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Virtual Address Space Mapping (64-bit):                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  Application Memory         Shadow Memory                              │ │
+│  │  (8 bytes)          ───►    (1 byte)                                   │ │
+│  │                                                                        │ │
+│  │  Shadow = (Addr >> 3) + ShadowOffset                                   │ │
+│  │  ShadowOffset = 0x7fff8000 (typical 64-bit)                            │ │
+│  │                                                                        │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  Address Space Layout:                                           │  │ │
+│  │  │                                                                  │  │ │
+│  │  │  0x10007fff8000 ┌────────────────┐                               │  │ │
+│  │  │                 │  High Shadow   │ (for high memory)             │  │ │
+│  │  │  0x02008fff7fff ├────────────────┤                               │  │ │
+│  │  │                 │  High Memory   │ (mmap, stack)                 │  │ │
+│  │  │  0x00008fff7fff ├────────────────┤                               │  │ │
+│  │  │                 │  Shadow Gap    │ (unmapped - fault on access)  │  │ │
+│  │  │  0x00007fff8000 ├────────────────┤                               │  │ │
+│  │  │                 │  Low Shadow    │ (for low memory)              │  │ │
+│  │  │  0x000000000000 ├────────────────┤                               │  │ │
+│  │  │                 │  Low Memory    │ (heap, globals)               │  │ │
+│  │  │                 └────────────────┘                               │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Shadow Byte Encoding:                                                      │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Value │ Meaning                                                       │ │
+│  │  ──────┼─────────────────────────────────────────────────────────────  │ │
+│  │  0x00  │ All 8 bytes addressable (valid memory)                        │ │
+│  │  0x01-7│ First N bytes addressable, rest poisoned (partial)            │ │
+│  │  0xfa  │ Stack left redzone                                            │ │
+│  │  0xfb  │ Stack mid redzone                                             │ │
+│  │  0xfc  │ Stack right redzone                                           │ │
+│  │  0xfd  │ Stack after return (use-after-return)                         │ │
+│  │  0xf1  │ Stack left redzone (aligned)                                  │ │
+│  │  0xf2  │ Stack mid redzone (aligned)                                   │ │
+│  │  0xf3  │ Stack right redzone (aligned)                                 │ │
+│  │  0xf5  │ Stack use after scope                                         │ │
+│  │  0xf8  │ Stack use after scope (32-bit)                                │ │
+│  │  0xfe  │ Heap left redzone                                             │ │
+│  │  0xfa  │ Heap freed memory (quarantine)                                │ │
+│  │  0xf9  │ Global redzone                                                │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Instrumented Memory Access:                                                │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Original Code:                                                        │ │
+│  │    *ptr = value;                                                       │ │
+│  │                                                                        │ │
+│  │  Instrumented Code (pseudo-assembly):                                  │ │
+│  │    shadow_addr = (ptr >> 3) + SHADOW_OFFSET;                           │ │
+│  │    shadow_value = *shadow_addr;                                        │ │
+│  │    if (shadow_value != 0) {                                            │ │
+│  │      // Check if access is partially valid                             │ │
+│  │      if ((ptr & 7) + access_size > shadow_value) {                     │ │
+│  │        __asan_report_store(ptr, access_size);  // Report error         │ │
+│  │      }                                                                 │ │
+│  │    }                                                                   │ │
+│  │    *ptr = value;  // Original store                                    │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Valgrind Binary Translation
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Valgrind Instrumentation Pipeline                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Program Execution Under Valgrind:                                          │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  Original Binary         Valgrind Core          Instrumented Code      │ │
+│  │  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐        │ │
+│  │  │              │       │              │       │              │        │ │
+│  │  │  Machine     │       │  Disassemble │       │  IR with     │        │ │
+│  │  │  Code        │ ────► │  to IR       │ ────► │  Tool        │        │ │
+│  │  │  (x86/ARM)   │       │  (VEX lib)   │       │  Callbacks   │        │ │
+│  │  │              │       │              │       │              │        │ │
+│  │  └──────────────┘       └──────────────┘       └──────┬───────┘        │ │
+│  │                                                       │                │ │
+│  │                                                       v                │ │
+│  │                                                ┌──────────────┐        │ │
+│  │                                                │  Reassemble  │        │ │
+│  │                                                │  to Native   │        │ │
+│  │                                                │  Code        │        │ │
+│  │                                                └──────┬───────┘        │ │
+│  │                                                       │                │ │
+│  │                                                       v                │ │
+│  │                                                ┌──────────────┐        │ │
+│  │                                                │  Execute in  │        │ │
+│  │                                                │  Code Cache  │        │ │
+│  │                                                └──────────────┘        │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  VEX Intermediate Representation:                                           │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Example: x86 instruction translation                                  │ │
+│  │                                                                        │ │
+│  │  Original x86:                                                         │ │
+│  │    mov eax, [ebx+4]     ; Load from memory                             │ │
+│  │                                                                        │ │
+│  │  VEX IR:                                                               │ │
+│  │    t1 = GET:I32(ebx)             ; Get ebx register                    │ │
+│  │    t2 = Add32(t1, 4)             ; Calculate address                   │ │
+│  │    t3 = LDle:I32(t2)             ; Load from memory                    │ │
+│  │    PUT(eax) = t3                 ; Store to eax                        │ │
+│  │                                                                        │ │
+│  │  Memcheck Instrumented IR:                                             │ │
+│  │    t1 = GET:I32(ebx)                                                   │ │
+│  │    t1_shadow = GET:I32(ebx_shadow)  ; Get shadow bits                  │ │
+│  │    t2 = Add32(t1, 4)                                                   │ │
+│  │    CHECK_DEFINED(t1_shadow)         ; Check ebx is defined             │ │
+│  │    CHECK_ADDRESSABLE(t2, 4)         ; Check 4 bytes addressable        │ │
+│  │    t3 = LDle:I32(t2)                                                   │ │
+│  │    t3_shadow = LDle:I32(shadow(t2)) ; Load shadow bits                 │ │
+│  │    PUT(eax) = t3                                                       │ │
+│  │    PUT(eax_shadow) = t3_shadow      ; Propagate definedness            │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Memcheck Shadow Memory (V-bits):                                           │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Every byte of application memory has a shadow "V-bit":                │ │
+│  │                                                                        │ │
+│  │  V-bit = 0: Byte is defined (initialized)                              │ │
+│  │  V-bit = 1: Byte is undefined (uninitialized)                          │ │
+│  │                                                                        │ │
+│  │  Additionally, A-bits track addressability:                            │ │
+│  │  A-bit = 0: Address is not valid (unmapped/freed)                      │ │
+│  │  A-bit = 1: Address is valid (allocated)                               │ │
+│  │                                                                        │ │
+│  │  Memory operations:                                                    │ │
+│  │  - malloc(): Set A-bits=1, V-bits=1 (addressable but undefined)        │ │
+│  │  - write: Set V-bits=0 for written bytes                               │ │
+│  │  - free(): Set A-bits=0 (no longer addressable)                        │ │
+│  │  - read: Check A-bits=1 and report if V-bits=1                         │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### KASAN Kernel Implementation
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Kernel AddressSanitizer Internals                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  KASAN Shadow Memory Layout (ARM64):                                        │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  Kernel Virtual Address Space (48-bit):                                │ │
+│  │                                                                        │ │
+│  │  0xffff_ffff_ffff_ffff ┌────────────────────┐                          │ │
+│  │                        │  Kernel            │                          │ │
+│  │                        │  (vmlinux, vmalloc)│                          │ │
+│  │  0xffff_0000_0000_0000 ├────────────────────┤                          │ │
+│  │                        │  KASAN Shadow      │                          │ │
+│  │                        │  1:8 mapping       │                          │ │
+│  │  0xdfff_0000_0000_0000 ├────────────────────┤                          │ │
+│  │                        │  Direct Map        │                          │ │
+│  │                        │  (linear mapping)  │                          │ │
+│  │                        ├────────────────────┤                          │ │
+│  │                        │  ...               │                          │ │
+│  │  0x0000_0000_0000_0000 └────────────────────┘                          │ │
+│  │                                                                        │ │
+│  │  Shadow Address Calculation:                                           │ │
+│  │    shadow = (addr >> KASAN_SHADOW_SCALE_SHIFT) + KASAN_SHADOW_OFFSET   │ │
+│  │    KASAN_SHADOW_SCALE_SHIFT = 3 (1:8 ratio)                            │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  KASAN Hook Points:                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  Memory Allocator Hooks:                                               │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  SLAB/SLUB Allocator:                                            │  │ │
+│  │  │    kmalloc() ──► kasan_kmalloc() ──► poison redzones             │  │ │
+│  │  │    kfree()   ──► kasan_slab_free() ──► poison entire object      │  │ │
+│  │  │                                                                  │  │ │
+│  │  │  Page Allocator:                                                 │  │ │
+│  │  │    alloc_pages() ──► kasan_alloc_pages() ──► unpoison range      │  │ │
+│  │  │    free_pages()  ──► kasan_free_pages()  ──► poison range        │  │ │
+│  │  │                                                                  │  │ │
+│  │  │  vmalloc:                                                        │  │ │
+│  │  │    vmalloc()    ──► kasan_unpoison_vmalloc()                     │  │ │
+│  │  │    vfree()      ──► kasan_poison_vmalloc()                       │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  │  Compiler Instrumentation (GCC/Clang):                                 │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  Every memory access instrumented with check:                    │  │ │
+│  │  │                                                                  │  │ │
+│  │  │  // Generated for: *ptr = val;                                   │  │ │
+│  │  │  __asan_store4(ptr);    // Check 4-byte store is valid           │  │ │
+│  │  │  *ptr = val;            // Original store                        │  │ │
+│  │  │                                                                  │  │ │
+│  │  │  // Generated for: val = *ptr;                                   │  │ │
+│  │  │  __asan_load4(ptr);     // Check 4-byte load is valid            │  │ │
+│  │  │  val = *ptr;            // Original load                         │  │ │
+│  │  │                                                                  │  │ │
+│  │  │  Check implementation (simplified):                              │  │ │
+│  │  │  void __asan_load4(void *addr) {                                 │  │ │
+│  │  │    u8 shadow = *(u8*)((addr >> 3) + KASAN_SHADOW_OFFSET);        │  │ │
+│  │  │    if (unlikely(shadow && shadow < ((addr & 7) + 4))) {          │  │ │
+│  │  │      kasan_report(addr, 4, false);  // Report invalid read       │  │ │
+│  │  │    }                                                             │  │ │
+│  │  │  }                                                               │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Quarantine (Use-After-Free Detection):                                     │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  Instead of immediately freeing memory, KASAN quarantines it:          │ │
+│  │                                                                        │ │
+│  │  kfree(ptr):                                                           │ │
+│  │    1. Poison the memory (set shadow to 0xFB)                           │ │
+│  │    2. Add to quarantine queue                                          │ │
+│  │    3. When quarantine full, actually free oldest entries               │ │
+│  │                                                                        │ │
+│  │  Quarantine Queue:                                                     │ │
+│  │  ┌────┬────┬────┬────┬────┬────┬────┬────┐                             │ │
+│  │  │ A  │ B  │ C  │ D  │ E  │ F  │ G  │ H  │  ◄── Newest freed           │ │
+│  │  └────┴────┴────┴────┴────┴────┴────┴────┘                             │ │
+│  │    │                                                                   │ │
+│  │    └── Oldest freed (will be actually freed when quarantine full)      │ │
+│  │                                                                        │ │
+│  │  CONFIG_KASAN_QUARANTINE_SIZE = 8MB (default)                          │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code References
+
+| Component | Repository | Key Files |
+|-----------|------------|-----------|
+| LLVM ASan Runtime | [llvm/compiler-rt](https://github.com/llvm/llvm-project) | `compiler-rt/lib/asan/` |
+| GCC ASan Runtime | [gcc/libsanitizer](https://github.com/gcc-mirror/gcc) | `libsanitizer/asan/` |
+| Valgrind Core | [valgrind/valgrind](https://sourceware.org/git/?p=valgrind.git) | `coregrind/`, `VEX/` |
+| Valgrind Memcheck | [valgrind/valgrind](https://sourceware.org/git/?p=valgrind.git) | `memcheck/mc_main.c`, `memcheck/mc_translate.c` |
+| Linux KASAN | [torvalds/linux](https://github.com/torvalds/linux) | `mm/kasan/`, `include/linux/kasan.h` |
+| Linux KCSAN | [torvalds/linux](https://github.com/torvalds/linux) | `kernel/kcsan/`, `include/linux/kcsan.h` |
+| Linux Lockdep | [torvalds/linux](https://github.com/torvalds/linux) | `kernel/locking/lockdep.c` |
+
+---
+
 ## References
 
 - [AddressSanitizer Documentation](https://clang.llvm.org/docs/AddressSanitizer.html) - Clang ASan reference

@@ -487,5 +487,380 @@ busctl introspect <service> <object> | grep interface
 
 ---
 
+## Deep Dive
+
+This section provides detailed technical information for developers who want to understand D-Bus internals in OpenBMC.
+
+### D-Bus Message Flow Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        D-Bus Message Flow in OpenBMC                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Client Application (e.g., bmcweb)                                          │
+│  ┌────────────────────────────────────────────────────────────────────┐     │
+│  │  sdbusplus::bus::new_default()                                     │     │
+│  │         │                                                          │     │
+│  │         v                                                          │     │
+│  │  bus.new_method_call(service, object, interface, method)           │     │
+│  │         │                                                          │     │
+│  │         v                                                          │     │
+│  │  method.append(arg1, arg2, ...)  // Serialize arguments            │     │
+│  │         │                                                          │     │
+│  │         v                                                          │     │
+│  │  bus.call(method)  ─────────────────────────────────────────┐      │     │
+│  │         │                                     Wait for reply │      │     │
+│  └─────────│─────────────────────────────────────────────────────────┘     │
+│            │                                                   │            │
+│            v                                                   │            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                     dbus-daemon (dbus-broker)                       │   │
+│  │                                                                     │   │
+│  │  1. Receive message from client socket                              │   │
+│  │  2. Validate message format and permissions (policy)                │   │
+│  │  3. Match destination service name to unique name (:1.XX)           │   │
+│  │  4. Route message to destination socket                             │   │
+│  │  5. Wait for reply from service                                     │   │
+│  │  6. Route reply back to client                                      │   │
+│  │                                                                     │   │
+│  │  Name Registry:                                                     │   │
+│  │  ┌───────────────────────────────────────────────────────────────┐  │   │
+│  │  │  :1.15 = xyz.openbmc_project.State.Host                       │  │   │
+│  │  │  :1.23 = xyz.openbmc_project.ObjectMapper                     │  │   │
+│  │  │  :1.42 = xyz.openbmc_project.Sensor.Manager                   │  │   │
+│  │  │  :1.58 = xyz.openbmc_project.Logging                          │  │   │
+│  │  └───────────────────────────────────────────────────────────────┘  │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│            │                                                   ^            │
+│            v                                                   │            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                   Service (e.g., phosphor-state-manager)            │   │
+│  │                                                                     │   │
+│  │  Event Loop (sd-event / boost::asio)                                │   │
+│  │         │                                                           │   │
+│  │         v                                                           │   │
+│  │  Message Dispatch: match destination object path                    │   │
+│  │         │                                                           │   │
+│  │         v                                                           │   │
+│  │  Interface Lookup: find registered interface handler                │   │
+│  │         │                                                           │   │
+│  │         v                                                           │   │
+│  │  Method/Property Handler: execute callback                          │   │
+│  │         │                                                           │   │
+│  │         v                                                           │   │
+│  │  Serialize reply and send ───────────────────────────────────┘      │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Object Mapper Internals
+
+The Object Mapper maintains a real-time view of all D-Bus objects:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      Object Mapper Data Structures                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Interface-to-Objects Map:                                                  │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  xyz.openbmc_project.Sensor.Value:                                     │ │
+│  │    - /xyz/openbmc_project/sensors/temperature/ambient                  │ │
+│  │    - /xyz/openbmc_project/sensors/temperature/cpu0                     │ │
+│  │    - /xyz/openbmc_project/sensors/fan_tach/fan0                        │ │
+│  │                                                                        │ │
+│  │  xyz.openbmc_project.State.Host:                                       │ │
+│  │    - /xyz/openbmc_project/state/host0                                  │ │
+│  │                                                                        │ │
+│  │  xyz.openbmc_project.Inventory.Item:                                   │ │
+│  │    - /xyz/openbmc_project/inventory/system/chassis/motherboard         │ │
+│  │    - /xyz/openbmc_project/inventory/system/chassis/motherboard/cpu0    │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Object-to-Services Map:                                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  /xyz/openbmc_project/sensors/temperature/cpu0:                        │ │
+│  │    - xyz.openbmc_project.HwmonTempSensor                               │ │
+│  │        Interfaces: [xyz.openbmc_project.Sensor.Value,                  │ │
+│  │                     xyz.openbmc_project.Sensor.Threshold.Warning,      │ │
+│  │                     xyz.openbmc_project.Sensor.Threshold.Critical,     │ │
+│  │                     xyz.openbmc_project.Association.Definitions]       │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Association Endpoints:                                                     │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  /xyz/openbmc_project/sensors/temperature/cpu0:                        │ │
+│  │    inventory (forward) -> /xyz/openbmc_project/inventory/.../cpu0      │ │
+│  │                                                                        │ │
+│  │  /xyz/openbmc_project/inventory/.../cpu0:                              │ │
+│  │    sensors (reverse) -> /xyz/openbmc_project/sensors/temperature/cpu0  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Update Mechanism:                                                          │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  1. Subscribe to org.freedesktop.DBus.ObjectManager signals            │ │
+│  │  2. Subscribe to NameOwnerChanged for service tracking                 │ │
+│  │  3. On InterfacesAdded: update maps, create association endpoints      │ │
+│  │  4. On InterfacesRemoved: clean up maps, remove endpoints              │ │
+│  │  5. On NameOwnerChanged: handle service start/stop                     │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### sdbusplus Code Generation Pipeline
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     sdbusplus Interface Generation                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Input: YAML Interface Definition                                           │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  # xyz/openbmc_project/Sensor/Value.interface.yaml                     │ │
+│  │  description: Sensor value interface                                   │ │
+│  │  properties:                                                           │ │
+│  │    - name: Value                                                       │ │
+│  │      type: double                                                      │ │
+│  │    - name: Unit                                                        │ │
+│  │      type: string                                                      │ │
+│  │  signals:                                                              │ │
+│  │    - name: ValueChanged                                                │ │
+│  │      properties:                                                       │ │
+│  │        - name: Value                                                   │ │
+│  │          type: double                                                  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                              │                                              │
+│                              v                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                    sdbus++ Code Generator                              │ │
+│  │                                                                        │ │
+│  │  python3 -m sdbusplus generate-cpp                                     │ │
+│  │    --tool sdbus++                                                      │ │
+│  │    --output-dir generated/                                             │ │
+│  │    xyz/openbmc_project/Sensor/Value                                    │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                              │                                              │
+│                              v                                              │
+│  Generated Output Files:                                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  server.hpp - Server-side implementation base class                    │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  namespace sdbusplus::xyz::openbmc_project::Sensor::server {     │  │ │
+│  │  │  class Value {                                                   │  │ │
+│  │  │    public:                                                       │  │ │
+│  │  │      double value() const;          // Property getter           │  │ │
+│  │  │      double value(double val);      // Property setter           │  │ │
+│  │  │      std::string unit() const;                                   │  │ │
+│  │  │      void valueChanged(double val); // Signal emitter            │  │ │
+│  │  │  };                                                              │  │ │
+│  │  │  }                                                               │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  │  client.hpp - Client-side proxy class                                  │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  class Value {                                                   │  │ │
+│  │  │    public:                                                       │  │ │
+│  │  │      auto value();     // Async property read                    │  │ │
+│  │  │      auto value(double); // Async property write                 │  │ │
+│  │  │  };                                                              │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  │  common.hpp - Shared type definitions, enums, errors                   │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### D-Bus Policy Configuration
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      D-Bus Security Policy                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Policy File Location: /usr/share/dbus-1/system.d/                          │
+│                                                                             │
+│  Policy Evaluation Order:                                                   │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  1. Check <deny> rules (most specific first)                           │ │
+│  │  2. Check <allow> rules (most specific first)                          │ │
+│  │  3. Default action (usually deny)                                      │ │
+│  │                                                                        │ │
+│  │  Specificity: user > group > context > default                         │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Example Policy: xyz.openbmc_project.State.Host.conf                        │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  <busconfig>                                                           │ │
+│  │    <!-- Allow root to own the service name -->                         │ │
+│  │    <policy user="root">                                                │ │
+│  │      <allow own="xyz.openbmc_project.State.Host"/>                     │ │
+│  │    </policy>                                                           │ │
+│  │                                                                        │ │
+│  │    <!-- Allow anyone to call methods and read properties -->           │ │
+│  │    <policy context="default">                                          │ │
+│  │      <allow send_destination="xyz.openbmc_project.State.Host"/>        │ │
+│  │      <allow receive_sender="xyz.openbmc_project.State.Host"/>          │ │
+│  │    </policy>                                                           │ │
+│  │                                                                        │ │
+│  │    <!-- Restrict property writes to specific users -->                 │ │
+│  │    <policy group="admin">                                              │ │
+│  │      <allow send_destination="xyz.openbmc_project.State.Host"          │ │
+│  │             send_interface="org.freedesktop.DBus.Properties"           │ │
+│  │             send_member="Set"/>                                        │ │
+│  │    </policy>                                                           │ │
+│  │  </busconfig>                                                          │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Common Policy Patterns:                                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Pattern              │ Use Case                                       │ │
+│  │  ─────────────────────┼─────────────────────────────────────────────── │ │
+│  │  own="service.name"   │ Allow process to claim well-known name         │ │
+│  │  send_destination     │ Allow sending messages to service              │ │
+│  │  send_interface       │ Restrict to specific D-Bus interface           │ │
+│  │  send_member          │ Restrict to specific method/property           │ │
+│  │  receive_sender       │ Allow receiving signals from service           │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### D-Bus Type System Internals
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      D-Bus Type Serialization                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Wire Format Example: Sensor Reading Message                                │
+│                                                                             │
+│  Method Call: Get("xyz.openbmc_project.Sensor.Value", "Value")              │
+│                                                                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Message Header (fixed format):                                        │ │
+│  │  ┌──────────┬──────────┬──────────┬──────────┬──────────────────────┐  │ │
+│  │  │ Endian   │ Type     │ Flags    │ Version  │ Body Length          │  │ │
+│  │  │ 'l'      │ 0x01     │ 0x00     │ 0x01     │ 52                   │  │ │
+│  │  │ (little) │ (method) │          │          │                      │  │ │
+│  │  └──────────┴──────────┴──────────┴──────────┴──────────────────────┘  │ │
+│  │                                                                        │ │
+│  │  Header Fields (variable):                                             │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  PATH:        /xyz/openbmc_project/sensors/temperature/cpu0     │  │ │
+│  │  │  INTERFACE:   org.freedesktop.DBus.Properties                   │  │ │
+│  │  │  MEMBER:      Get                                               │  │ │
+│  │  │  DESTINATION: xyz.openbmc_project.HwmonTempSensor               │  │ │
+│  │  │  SIGNATURE:   ss                                                │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  │  Body (marshalled arguments):                                          │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  String: "xyz.openbmc_project.Sensor.Value" (32 bytes + NUL)    │  │ │
+│  │  │  String: "Value" (5 bytes + NUL)                                │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Reply Message: Variant containing double                                   │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  SIGNATURE: v (variant)                                                │ │
+│  │                                                                        │ │
+│  │  Body:                                                                 │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  Variant signature: "d" (1 byte + NUL)                          │  │ │
+│  │  │  Padding: 5 bytes (align double to 8)                           │  │ │
+│  │  │  Double value: 45.5 (8 bytes, IEEE 754)                         │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Alignment Rules:                                                           │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Type      │ Alignment │ Size                                          │ │
+│  │  ──────────┼───────────┼───────────────────────────────────────────── │ │
+│  │  BYTE      │ 1         │ 1                                             │ │
+│  │  INT16     │ 2         │ 2                                             │ │
+│  │  INT32     │ 4         │ 4                                             │ │
+│  │  INT64     │ 8         │ 8                                             │ │
+│  │  DOUBLE    │ 8         │ 8                                             │ │
+│  │  STRING    │ 4         │ 4 (length) + data + NUL                       │ │
+│  │  ARRAY     │ 4         │ 4 (length) + elements (aligned)               │ │
+│  │  STRUCT    │ 8         │ sum of members (each aligned)                 │ │
+│  │  VARIANT   │ 1         │ signature + value                             │ │
+│  │  DICT      │ 8         │ array of struct{key, value}                   │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### PropertiesChanged Signal Mechanism
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   PropertiesChanged Signal Flow                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Sensor Service                        Subscriber (bmcweb, ipmid)           │
+│  ┌──────────────────────────────┐     ┌──────────────────────────────────┐  │
+│  │                              │     │                                  │  │
+│  │  // Update property value    │     │  // Subscribe to changes         │  │
+│  │  sensorValue(newReading);    │     │  bus.add_match(                  │  │
+│  │         │                    │     │    "type='signal',"              │  │
+│  │         v                    │     │    "interface='org.freedesktop." │  │
+│  │  // sdbusplus auto-emits:    │     │      "DBus.Properties',"         │  │
+│  │  PropertiesChanged(          │     │    "member='PropertiesChanged'," │  │
+│  │    "xyz.openbmc_project."    │     │    "arg0='xyz.openbmc_project."  │  │
+│  │      "Sensor.Value",         │     │      "Sensor.Value'"             │  │
+│  │    {"Value": variant(45.5)}, │     │  );                              │  │
+│  │    []                        │     │         │                        │  │
+│  │  );                          │     │         v                        │  │
+│  │         │                    │     │  // Callback invoked             │  │
+│  └─────────│────────────────────┘     │  handlePropertyChange(msg) {     │  │
+│            │                          │    auto [iface, changed, inv] =  │  │
+│            │                          │      msg.unpack<...>();          │  │
+│            │                          │    double val =                  │  │
+│            │                          │      std::get<double>(           │  │
+│            │                          │        changed.at("Value"));     │  │
+│            │                          │    // Update cache, emit SSE     │  │
+│            v                          │  }                               │  │
+│  ┌──────────────────────────────┐     │                                  │  │
+│  │       dbus-daemon            │     └──────────────────────────────────┘  │
+│  │                              │                    ^                      │
+│  │  Match rules table:          │                    │                      │
+│  │  ┌────────────────────────┐  │                    │                      │
+│  │  │ :1.23 matches:         │  │                    │                      │
+│  │  │   PropertiesChanged    │──│────────────────────┘                      │
+│  │  │   on Sensor.Value      │  │                                           │
+│  │  └────────────────────────┘  │                                           │
+│  │                              │                                           │
+│  └──────────────────────────────┘                                           │
+│                                                                             │
+│  Signal Contents:                                                           │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Arg 0 (s):  Interface name that changed                               │ │
+│  │  Arg 1 (a{sv}): Dictionary of changed properties and new values        │ │
+│  │  Arg 2 (as): Array of invalidated property names (cache hints)         │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code References
+
+| Component | Repository | Key Files |
+|-----------|------------|-----------|
+| sdbusplus library | [openbmc/sdbusplus](https://github.com/openbmc/sdbusplus) | `include/sdbusplus/bus.hpp`, `include/sdbusplus/message.hpp` |
+| Interface definitions | [openbmc/phosphor-dbus-interfaces](https://github.com/openbmc/phosphor-dbus-interfaces) | `yaml/xyz/openbmc_project/**/*.interface.yaml` |
+| Object Mapper | [openbmc/phosphor-objmgr](https://github.com/openbmc/phosphor-objmgr) | `src/main.cpp`, `src/associations.cpp` |
+| sdbus++ generator | [openbmc/sdbusplus](https://github.com/openbmc/sdbusplus) | `tools/sdbusplus/`, `tools/sdbus++` |
+| D-Bus policy files | [openbmc/openbmc](https://github.com/openbmc/openbmc) | `meta-phosphor/recipes-phosphor/dbus/` |
+| Async connection | [openbmc/sdbusplus](https://github.com/openbmc/sdbusplus) | `include/sdbusplus/asio/connection.hpp` |
+
+---
+
 {: .note }
 **Tested on**: OpenBMC master, QEMU romulus

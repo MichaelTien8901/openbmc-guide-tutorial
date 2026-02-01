@@ -577,5 +577,311 @@ vi ~/.ssh/known_hosts
 
 ---
 
+## Deep Dive
+
+This section provides detailed technical information for developers who want to understand SSH and PAM internals in OpenBMC.
+
+### Dropbear Connection Lifecycle
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Dropbear SSH Connection Flow                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  SSH Client                               Dropbear Server (BMC)             │
+│  ┌────────────────────────┐               ┌────────────────────────────┐    │
+│  │                        │               │                            │    │
+│  │  1. TCP Connect        │  ──────────>  │  accept() on port 22       │    │
+│  │     (port 22)          │               │  fork() child process      │    │
+│  │                        │               │                            │    │
+│  └────────────────────────┘               └────────────────────────────┘    │
+│                                                                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                     SSH Protocol Negotiation                           │ │
+│  │                                                                        │ │
+│  │  2. Version Exchange                                                   │ │
+│  │     Client: SSH-2.0-OpenSSH_8.4                                        │ │
+│  │     Server: SSH-2.0-dropbear_2020.81                                   │ │
+│  │                                                                        │ │
+│  │  3. Key Exchange (KEX)                                                 │ │
+│  │     ┌────────────────────────────────────────────────────────────────┐ │ │
+│  │     │  Client                        Server                         │ │ │
+│  │     │                                                               │ │ │
+│  │     │  SSH_MSG_KEXINIT ────────────> SSH_MSG_KEXINIT                │ │ │
+│  │     │  (supported algorithms)        (supported algorithms)         │ │ │
+│  │     │                                                               │ │ │
+│  │     │  KEX method: curve25519-sha256                                │ │ │
+│  │     │  Host key: ssh-ed25519                                        │ │ │
+│  │     │  Cipher: aes256-gcm@openssh.com                               │ │ │
+│  │     │  MAC: implicit (AEAD)                                         │ │ │
+│  │     │                                                               │ │ │
+│  │     │  ECDH_INIT ────────────────────> ECDH_REPLY                   │ │ │
+│  │     │  (client public key)            (server public key +          │ │ │
+│  │     │                                  host key signature)          │ │ │
+│  │     │                                                               │ │ │
+│  │     │  Verify host key against known_hosts                          │ │ │
+│  │     │  Derive session keys from shared secret                       │ │ │
+│  │     │                                                               │ │ │
+│  │     │  SSH_MSG_NEWKEYS ──────────────> SSH_MSG_NEWKEYS              │ │ │
+│  │     │  (encryption begins)             (encryption begins)          │ │ │
+│  │     └────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                        │ │
+│  │  4. User Authentication                                                │ │
+│  │     ┌────────────────────────────────────────────────────────────────┐ │ │
+│  │     │  USERAUTH_REQUEST(username, "ssh-connection", method)         │ │ │
+│  │     │                                                               │ │ │
+│  │     │  Method: "publickey" (preferred)                              │ │ │
+│  │     │    - Client sends public key                                  │ │ │
+│  │     │    - Server checks ~/.ssh/authorized_keys                     │ │ │
+│  │     │    - Client proves possession of private key                  │ │ │
+│  │     │                                                               │ │ │
+│  │     │  Method: "password" (if enabled)                              │ │ │
+│  │     │    - PAM authentication (pam_unix, pam_ldap, etc.)            │ │ │
+│  │     │                                                               │ │ │
+│  │     │  USERAUTH_SUCCESS / USERAUTH_FAILURE                          │ │ │
+│  │     └────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                        │ │
+│  │  5. Channel Establishment                                              │ │
+│  │     CHANNEL_OPEN("session") ──────────> CHANNEL_OPEN_CONFIRMATION      │ │
+│  │     CHANNEL_REQUEST("pty-req")                                         │ │
+│  │     CHANNEL_REQUEST("shell") ──────────> Start /bin/sh                 │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  6. Interactive Session                                                     │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  CHANNEL_DATA ←──────────────────────────────→ CHANNEL_DATA            │ │
+│  │  (encrypted stdin/stdout)                      (shell I/O)             │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### PAM Authentication Stack
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      PAM Module Execution Flow                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Dropbear calls: pam_authenticate(pamh, 0)                                  │
+│                                                                             │
+│  PAM Configuration: /etc/pam.d/dropbear                                     │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  # /etc/pam.d/dropbear                                                 │ │
+│  │  auth       include      common-auth                                   │ │
+│  │  account    include      common-account                                │ │
+│  │  password   include      common-password                               │ │
+│  │  session    include      common-session                                │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Module Execution (common-auth):                                            │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  auth [success=1 default=ignore] pam_unix.so nullok              │  │ │
+│  │  │                                                                  │  │ │
+│  │  │  1. Read /etc/passwd for user entry                              │  │ │
+│  │  │  2. Read /etc/shadow for password hash                           │  │ │
+│  │  │  3. Hash provided password with same algorithm (SHA-512)         │  │ │
+│  │  │  4. Compare hashes                                               │  │ │
+│  │  │                                                                  │  │ │
+│  │  │  Result: PAM_SUCCESS or PAM_AUTH_ERR                             │  │ │
+│  │  │                                                                  │  │ │
+│  │  │  [success=1] = if success, skip 1 rule (pam_deny)                │  │ │
+│  │  │  [default=ignore] = if fail, continue to next rule               │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                              │                                         │ │
+│  │               ┌──────────────┴──────────────┐                          │ │
+│  │               │                             │                          │ │
+│  │           SUCCESS                       FAILURE                        │ │
+│  │               │                             │                          │ │
+│  │               v                             v                          │ │
+│  │  ┌─────────────────────┐     ┌─────────────────────────────────────┐   │ │
+│  │  │ Skip pam_deny       │     │  auth requisite pam_deny.so         │   │ │
+│  │  │ Go to pam_permit    │     │                                     │   │ │
+│  │  └─────────────────────┘     │  Returns PAM_AUTH_ERR immediately   │   │ │
+│  │               │              │  (requisite = fail immediately)     │   │ │
+│  │               v              └─────────────────────────────────────┘   │ │
+│  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
+│  │  │  auth required pam_permit.so                                    │   │ │
+│  │  │                                                                 │   │ │
+│  │  │  Always returns PAM_SUCCESS                                     │   │ │
+│  │  │  (ensures clean success return)                                 │   │ │
+│  │  └─────────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Control Flags:                                                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Flag        │ On Success        │ On Failure                         │ │
+│  │  ────────────┼───────────────────┼──────────────────────────────────── │ │
+│  │  required    │ Continue          │ Continue, but fail eventually      │ │
+│  │  requisite   │ Continue          │ Return failure immediately         │ │
+│  │  sufficient  │ Return success    │ Continue                           │ │
+│  │  optional    │ Continue          │ Continue                           │ │
+│  │  [action=N]  │ Skip N rules      │ Custom action per result           │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### SSH Key Authentication Internals
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Public Key Authentication Flow                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Client                                   Server (Dropbear)                 │
+│  ┌────────────────────────────┐           ┌────────────────────────────┐    │
+│  │                            │           │                            │    │
+│  │  Load private key          │           │  Receive public key blob   │    │
+│  │  ~/.ssh/id_ed25519         │           │                            │    │
+│  │                            │           │                            │    │
+│  └────────────────────────────┘           └────────────────────────────┘    │
+│                                                                             │
+│  Step 1: Query if public key is acceptable                                  │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  Client sends:                                                         │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  SSH_MSG_USERAUTH_REQUEST                                        │  │ │
+│  │  │    username: "root"                                              │  │ │
+│  │  │    service: "ssh-connection"                                     │  │ │
+│  │  │    method: "publickey"                                           │  │ │
+│  │  │    has_signature: FALSE (query only)                             │  │ │
+│  │  │    algorithm: "ssh-ed25519"                                      │  │ │
+│  │  │    public_key_blob: <32 bytes>                                   │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  │  Server checks:                                                        │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  1. Open /home/root/.ssh/authorized_keys                         │  │ │
+│  │  │  2. Parse each line:                                             │  │ │
+│  │  │     ssh-ed25519 AAAA... user@host                                │  │ │
+│  │  │  3. Compare key type and blob with request                       │  │ │
+│  │  │  4. Check options (from=, command=, etc.)                        │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  │  Server responds: SSH_MSG_USERAUTH_PK_OK (key is acceptable)           │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Step 2: Prove possession of private key                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  Client creates signature:                                             │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  data_to_sign = session_id || SSH_MSG_USERAUTH_REQUEST ||        │  │ │
+│  │  │                 username || service || "publickey" ||            │  │ │
+│  │  │                 TRUE || algorithm || public_key_blob             │  │ │
+│  │  │                                                                  │  │ │
+│  │  │  signature = ed25519_sign(private_key, data_to_sign)             │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  │  Client sends:                                                         │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  SSH_MSG_USERAUTH_REQUEST                                        │  │ │
+│  │  │    has_signature: TRUE                                           │  │ │
+│  │  │    signature: <64 bytes>                                         │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  │  Server verifies:                                                      │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  1. Reconstruct data_to_sign (same as client)                    │  │ │
+│  │  │  2. ed25519_verify(public_key, data_to_sign, signature)          │  │ │
+│  │  │  3. If valid: SSH_MSG_USERAUTH_SUCCESS                           │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  authorized_keys Format:                                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  [options] key-type base64-key [comment]                               │ │
+│  │                                                                        │ │
+│  │  Examples:                                                             │ │
+│  │  ssh-ed25519 AAAAC3Nz... user@laptop                                   │ │
+│  │  from="192.168.1.*" ssh-rsa AAAAB3Nz... admin@server                   │ │
+│  │  command="/usr/bin/validate" ssh-ed25519 AAAAC3... script@automation   │ │
+│  │  no-pty,no-port-forwarding ssh-rsa AAAAB3... restricted@host           │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Host Key Management
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Dropbear Host Key Generation                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Key Storage: /etc/dropbear/                                                │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  /etc/dropbear/                                                        │ │
+│  │  ├── dropbear_rsa_host_key      # RSA 2048/4096-bit                    │ │
+│  │  ├── dropbear_ecdsa_host_key    # ECDSA nistp256/384/521               │ │
+│  │  └── dropbear_ed25519_host_key  # Ed25519 (recommended)                │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Key Generation (first boot or manual):                                     │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  # Generate Ed25519 key (fast, secure)                                 │ │
+│  │  dropbearkey -t ed25519 -f /etc/dropbear/dropbear_ed25519_host_key     │ │
+│  │                                                                        │ │
+│  │  # Generate RSA key (for legacy client compatibility)                  │ │
+│  │  dropbearkey -t rsa -s 4096 -f /etc/dropbear/dropbear_rsa_host_key     │ │
+│  │                                                                        │ │
+│  │  # Generate ECDSA key                                                  │ │
+│  │  dropbearkey -t ecdsa -s 521 -f /etc/dropbear/dropbear_ecdsa_host_key  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Dropbear Key File Format (internal):                                       │ │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Not OpenSSH compatible - binary format specific to Dropbear           │ │
+│  │                                                                        │ │
+│  │  Convert to OpenSSH format (for inspection):                           │ │
+│  │  dropbearconvert dropbear openssh                                      │ │
+│  │    /etc/dropbear/dropbear_ed25519_host_key                             │ │
+│  │    /tmp/openssh_host_key                                               │ │
+│  │                                                                        │ │
+│  │  Extract public key:                                                   │ │
+│  │  dropbearkey -y -f /etc/dropbear/dropbear_ed25519_host_key             │ │
+│  │  # Output: ssh-ed25519 AAAAC3Nz... root@bmc                            │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Yocto Persistent Key Configuration:                                        │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  # Option 1: Generate at first boot (in init script)                   │ │
+│  │  if [ ! -f /etc/dropbear/dropbear_ed25519_host_key ]; then             │ │
+│  │      dropbearkey -t ed25519 -f /etc/dropbear/dropbear_ed25519_host_key │ │
+│  │  fi                                                                    │ │
+│  │                                                                        │ │
+│  │  # Option 2: Pre-generate and include in image (production)            │ │
+│  │  # In recipe .bbappend:                                                │ │
+│  │  SRC_URI += "file://dropbear_ed25519_host_key"                         │ │
+│  │  do_install:append() {                                                 │ │
+│  │      install -m 0600 ${WORKDIR}/dropbear_ed25519_host_key \            │ │
+│  │          ${D}${sysconfdir}/dropbear/                                   │ │
+│  │  }                                                                     │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code References
+
+| Component | Repository | Key Files |
+|-----------|------------|-----------|
+| Dropbear SSH Server | [mkj/dropbear](https://github.com/mkj/dropbear) | `svr-main.c`, `svr-authpasswd.c`, `svr-authpubkey.c` |
+| Dropbear Yocto Recipe | [openembedded-core](https://git.openembedded.org/openembedded-core) | `meta/recipes-core/dropbear/` |
+| Linux PAM | [linux-pam/linux-pam](https://github.com/linux-pam/linux-pam) | `modules/pam_unix/`, `libpam/` |
+| PAM Configuration | [openbmc/openbmc](https://github.com/openbmc/openbmc) | `meta-phosphor/recipes-extended/pam/` |
+| OpenBMC Security Docs | [openbmc/docs](https://github.com/openbmc/docs) | `security/` |
+
+---
+
 {: .note }
 **Tested on**: OpenBMC master, QEMU romulus

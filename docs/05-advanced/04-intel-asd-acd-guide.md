@@ -798,5 +798,292 @@ OpenIPC (Open In-band Processor Communication) is part of Intel System Studio an
 
 ---
 
+## Deep Dive
+
+This section provides detailed technical information for developers who want to understand Intel ASD and crash dump internals.
+
+### ASD Protocol Message Format
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      ASD Network Protocol Format                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  TCP Connection (Port 5123):                                                │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  1. Client connects to BMC:5123                                        │ │
+│  │  2. TLS handshake (optional, depends on config)                        │ │
+│  │  3. Authentication (BMC credentials via custom protocol)               │ │
+│  │  4. Message exchange begins                                            │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  ASD Message Header:                                                        │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Offset │ Size │ Field        │ Description                            │ │
+│  │  ───────┼──────┼──────────────┼─────────────────────────────────────── │ │
+│  │  0x00   │ 1    │ cmd_stat     │ Command/Status byte                    │ │
+│  │  0x01   │ 1    │ cmd_type     │ Message type                           │ │
+│  │  0x02   │ 2    │ size_lsb     │ Payload size (little-endian)           │ │
+│  │  0x04   │ 2    │ size_msb     │                                        │ │
+│  │  0x06   │ 1    │ tag          │ Sequence tag for request matching      │ │
+│  │  0x07   │ 1    │ origin       │ Message origin ID                      │ │
+│  │  0x08   │ N    │ payload      │ Variable-length payload                │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Message Types (cmd_type):                                                  │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Type   │ Name              │ Description                              │ │
+│  │  ───────┼───────────────────┼─────────────────────────────────────────│ │
+│  │  0x01   │ AGENT_CONTROL     │ Init, reset, status queries              │ │
+│  │  0x02   │ JTAG_CHAIN        │ JTAG operations (scan, shift)            │ │
+│  │  0x03   │ I2C_MSG           │ I2C read/write transactions              │ │
+│  │  0x04   │ GPIO_MSG          │ GPIO control (XDP signals)               │ │
+│  │  0x05   │ REMOTE_DEBUG      │ Enable/disable debug mode                │ │
+│  │  0x06   │ HW_DEBUG          │ Hardware debug operations                │ │
+│  │  0x07   │ I3C_MSG           │ I3C transactions (newer CPUs)            │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  JTAG Message Payload:                                                      │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  JTAG_CHAIN message structure:                                         │ │
+│  │                                                                        │ │
+│  │  ┌──────────┬──────────┬────────────────────────────────────────────┐  │ │
+│  │  │ JTAG Cmd │ Bit Count│ TDI/TMS Data                               │  │ │
+│  │  │ (1 byte) │ (2 bytes)│ (N bytes, packed bits)                     │  │ │
+│  │  └──────────┴──────────┴────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  │  JTAG Commands:                                                        │ │
+│  │  0x00 - SET_TAP_STATE  (navigate TAP state machine)                    │ │
+│  │  0x01 - WAIT_CYCLES    (idle cycles)                                   │ │
+│  │  0x02 - SHIFT_TDI      (shift data into chain)                         │ │
+│  │  0x03 - SHIFT_TDO      (shift data out of chain)                       │ │
+│  │  0x04 - SHIFT_TDI_TDO  (bidirectional shift)                           │ │
+│  │  0x05 - SCAN_CHAIN     (auto-discover JTAG chain)                      │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### JTAG TAP State Machine
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        JTAG TAP State Machine                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│                        ┌──────────────────┐                                 │
+│                        │   Test-Logic-    │<──── TMS=1 (5+ clocks to reset) │
+│              ┌────────>│     Reset        │                                 │
+│              │         └────────┬─────────┘                                 │
+│              │                  │ TMS=0                                     │
+│              │                  v                                           │
+│              │         ┌──────────────────┐                                 │
+│              │         │   Run-Test/Idle  │<────────────────┐               │
+│              │         └────────┬─────────┘                 │               │
+│              │                  │ TMS=1                     │ TMS=0         │
+│              │                  v                           │               │
+│              │         ┌──────────────────┐                 │               │
+│              │         │   Select-DR-Scan │─── TMS=1 ───────┼──┐            │
+│              │         └────────┬─────────┘                 │  │            │
+│              │                  │ TMS=0                     │  │            │
+│              │                  v                           │  │            │
+│              │         ┌──────────────────┐                 │  │            │
+│              │         │    Capture-DR    │                 │  │            │
+│              │         └────────┬─────────┘                 │  │            │
+│              │                  │ TMS=0                     │  │            │
+│              │                  v                           │  │            │
+│              │         ┌──────────────────┐                 │  │            │
+│    TMS=1     │   ┌────>│     Shift-DR     │───┐ TMS=0      │  │            │
+│     │        │   │     └────────┬─────────┘   │ (loop)     │  │            │
+│     │        │   │              │ TMS=1       │            │  │            │
+│     │        │   │              v             │            │  │            │
+│     │        │   │     ┌──────────────────┐   │            │  │            │
+│     │        │   │     │     Exit1-DR     │<──┘            │  │            │
+│     │        │   │     └────────┬─────────┘                │  │            │
+│     │        │   │ TMS=0        │ TMS=1                    │  │            │
+│     │        │   │              v                          │  │            │
+│     │        │   │     ┌──────────────────┐                │  │            │
+│     │        │   └─────│     Pause-DR     │                │  │            │
+│     │        │         └────────┬─────────┘                │  │            │
+│     │        │                  │ TMS=1                    │  │            │
+│     │        │                  v                          │  │            │
+│     │        │         ┌──────────────────┐                │  │            │
+│     │        │         │     Exit2-DR     │                │  │            │
+│     │        │         └────────┬─────────┘                │  │            │
+│     │        │                  │ TMS=1                    │  │            │
+│     │        │                  v                          │  │            │
+│     │        │         ┌──────────────────┐                │  │            │
+│     │        └─────────│    Update-DR     │────────────────┘  │            │
+│     │                  └──────────────────┘                   │            │
+│     │                                                         │            │
+│     │                  ┌──────────────────┐                   │            │
+│     └──────────────────│  Select-IR-Scan  │<──────────────────┘            │
+│                        └────────┬─────────┘                                 │
+│                                 │                                           │
+│                       (IR path mirrors DR path)                             │
+│                                                                             │
+│  Key States:                                                                │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  State       │ Purpose                                                 │ │
+│  │  ────────────┼──────────────────────────────────────────────────────── │ │
+│  │  Shift-DR    │ Shift data through Data Register (target registers)     │ │
+│  │  Shift-IR    │ Shift instruction to select which DR to access          │ │
+│  │  Update-DR   │ Latch shifted data into target register                 │ │
+│  │  Capture-DR  │ Capture current register value for readout              │ │
+│  │  Run-Test    │ Execute loaded instruction (run test, BIST, etc.)       │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### PECI Crash Dump Command Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PECI Crash Dump Collection Sequence                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  BMC (crashdump service)                    Intel CPU                       │
+│  ┌──────────────────────────────┐           ┌──────────────────────────┐    │
+│  │                              │           │                          │    │
+│  │  1. Detect CATERR# GPIO      │           │  Error condition         │    │
+│  │     (falling edge interrupt) │<──────────│  asserts CATERR#         │    │
+│  │                              │           │                          │    │
+│  │  2. PECI Ping (verify CPU)   │           │                          │    │
+│  │     ┌────────────────────────┴───────────┴────────────────────────┐ │    │
+│  │     │  Command: Ping                                              │ │    │
+│  │     │  Address: 0x30 (CPU0) or 0x31 (CPU1)                        │ │    │
+│  │     │  Response: Completion code 0x40 = success                   │ │    │
+│  │     └─────────────────────────────────────────────────────────────┘ │    │
+│  │                              │           │                          │    │
+│  │  3. Read CPU ID             │           │                          │    │
+│  │     ┌────────────────────────┴───────────┴────────────────────────┐ │    │
+│  │     │  Command: RdPkgConfig                                       │ │    │
+│  │     │  Index: 0x00 (CPU_ID)                                       │ │    │
+│  │     │  Response: Family/Model/Stepping                            │ │    │
+│  │     └─────────────────────────────────────────────────────────────┘ │    │
+│  │                              │           │                          │    │
+│  │  4. Read MCA Banks          │           │                          │    │
+│  │     ┌────────────────────────┴───────────┴────────────────────────┐ │    │
+│  │     │  For each MCA bank (0 to N):                                │ │    │
+│  │     │    Command: RdIAMSR                                         │ │    │
+│  │     │    Thread: 0 (or iterate all threads)                       │ │    │
+│  │     │    MSR: IA32_MCi_STATUS (0x401, 0x405, 0x409, ...)          │ │    │
+│  │     │    MSR: IA32_MCi_ADDR (0x402, 0x406, 0x40A, ...)            │ │    │
+│  │     │    MSR: IA32_MCi_MISC (0x403, 0x407, 0x40B, ...)            │ │    │
+│  │     └─────────────────────────────────────────────────────────────┘ │    │
+│  │                              │           │                          │    │
+│  │  5. Crashdump Discovery     │           │                          │    │
+│  │     ┌────────────────────────┴───────────┴────────────────────────┐ │    │
+│  │     │  Command: CrashDump Discovery                               │ │    │
+│  │     │  Returns: Available crashdump sections and sizes            │ │    │
+│  │     │  Sections: TOR, PM_Info, Address_Map, etc.                  │ │    │
+│  │     └─────────────────────────────────────────────────────────────┘ │    │
+│  │                              │           │                          │    │
+│  │  6. Read Crashdump Data     │           │                          │    │
+│  │     ┌────────────────────────┴───────────┴────────────────────────┐ │    │
+│  │     │  Command: CrashDump GetFrame                                │ │    │
+│  │     │  Section: (TOR, PM_Info, etc.)                              │ │    │
+│  │     │  Frame: 0, 1, 2, ... (paginate through data)                │ │    │
+│  │     │  Response: 64-byte frame of crash data                      │ │    │
+│  │     └─────────────────────────────────────────────────────────────┘ │    │
+│  │                              │           │                          │    │
+│  │  7. Store JSON output       │           │                          │    │
+│  │     /var/lib/crashdump/     │           │                          │    │
+│  │                              │           │                          │    │
+│  └──────────────────────────────┘           └──────────────────────────┘    │
+│                                                                             │
+│  PECI Wire Protocol:                                                        │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Single-wire, half-duplex bus (OD with pull-up)                        │ │
+│  │  Clock: 1 MHz typical (variable negotiated)                            │ │
+│  │                                                                        │ │
+│  │  Frame Format:                                                         │ │
+│  │  ┌────────┬────────┬────────┬────────┬────────┬────────┐              │ │
+│  │  │  AWF   │ Target │ Write  │ Read   │ Cmd/   │  FCS   │              │ │
+│  │  │(preamble)│ Addr │  Len   │  Len   │ Data   │(checksum)│            │ │
+│  │  └────────┴────────┴────────┴────────┴────────┴────────┘              │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### MCA Bank Status Register Format
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    IA32_MCi_STATUS Register (MSR)                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  64-bit Machine Check Architecture Status Register:                         │
+│                                                                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Bit  │ Name    │ Description                                          │ │
+│  │  ─────┼─────────┼─────────────────────────────────────────────────────│ │
+│  │  63   │ VAL     │ Valid - Error recorded in this bank                  │ │
+│  │  62   │ OVER    │ Overflow - Multiple errors, some lost                │ │
+│  │  61   │ UC      │ Uncorrected - Error not corrected                    │ │
+│  │  60   │ EN      │ Enabled - Error reporting was enabled                │ │
+│  │  59   │ MISCV   │ MISC Valid - MCi_MISC contains valid info            │ │
+│  │  58   │ ADDRV   │ ADDR Valid - MCi_ADDR contains fault address         │ │
+│  │  57   │ PCC     │ Processor Context Corrupt - restart required         │ │
+│  │  56   │ S       │ Signaled - Error was signaled to software            │ │
+│  │  55   │ AR      │ Action Required - Immediate action needed            │ │
+│  │  54-53│ LSB     │ Corrected error local significance                   │ │
+│  │  52-38│ Other   │ Model-specific error information                     │ │
+│  │  37   │ FW      │ Firmware-corrected error                             │ │
+│  │  36-32│ MSCOD   │ Model-specific error code                            │ │
+│  │  31-16│ MCACOD  │ MCA error code (architecture-defined)                │ │
+│  │  15-0 │ Reserved│ (varies by generation)                               │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  MCACOD (bits 15:0) Error Type Examples:                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Code   │ Meaning                                                      │ │
+│  │  ───────┼─────────────────────────────────────────────────────────────│ │
+│  │  0x0001 │ Unclassified error                                           │ │
+│  │  0x0005 │ Internal parity error                                        │ │
+│  │  0x000A │ Generic I/O error                                            │ │
+│  │  0x010A │ Memory controller error (channel A)                          │ │
+│  │  0x010C │ Memory controller error (channel C)                          │ │
+│  │  0x0150 │ Memory ECC error                                             │ │
+│  │  0x0400 │ Watchdog timer (internal)                                    │ │
+│  │  0x0800 │ Internal timer error                                         │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Decoding Example:                                                          │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  MC0_STATUS = 0xBE00000000800400                                       │ │
+│  │                                                                        │ │
+│  │  Bit 63 (VAL) = 1   -> Error is valid                                  │ │
+│  │  Bit 62 (OVER) = 0  -> No overflow                                     │ │
+│  │  Bit 61 (UC) = 1    -> Uncorrected error                               │ │
+│  │  Bit 60 (EN) = 1    -> Error reporting enabled                         │ │
+│  │  Bit 59 (MISCV) = 1 -> MCi_MISC is valid                               │ │
+│  │  Bit 58 (ADDRV) = 1 -> MCi_ADDR is valid                               │ │
+│  │  Bit 57 (PCC) = 1   -> Processor context corrupt                       │ │
+│  │  MCACOD = 0x0400    -> Watchdog timer error                            │ │
+│  │                                                                        │ │
+│  │  Interpretation: Uncorrected watchdog error, context corrupt,          │ │
+│  │                 system restart required                                │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code References
+
+| Component | Repository | Key Files |
+|-----------|------------|-----------|
+| ASD Daemon | [Intel-BMC/asd](https://github.com/Intel-BMC/asd) | `server/asd_main.c`, `server/jtag_handler.c`, `server/target_handler.c` |
+| Crashdump Service | [openbmc/crashdump](https://github.com/openbmc/crashdump) | `crashdump.cpp`, `peci.cpp`, `mca.cpp` |
+| PECI Library | [openbmc/libpeci](https://github.com/openbmc/libpeci) | `peci.c`, `peci_cmds.c` |
+| bmcweb Crashdump API | [openbmc/bmcweb](https://github.com/openbmc/bmcweb) | `redfish-core/lib/log_services.hpp` |
+| Intel IPMI OEM | [openbmc/intel-ipmi-oem](https://github.com/openbmc/intel-ipmi-oem) | `src/oemcommands.cpp` |
+
+---
+
 {: .note }
 **Platform**: Intel Xeon platforms only. Features vary by CPU generation.

@@ -688,5 +688,386 @@ systemctl restart bmcweb
 
 ---
 
+## Deep Dive
+
+This section provides detailed technical information for developers who want to understand the WebUI architecture and internals.
+
+### WebUI Request Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        WebUI Request Flow Architecture                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Browser (webui-vue SPA)                                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  1. User Action (e.g., click "Power On")                               │ │
+│  │         │                                                              │ │
+│  │         v                                                              │ │
+│  │  Vue Component: PowerOperations.vue                                    │ │
+│  │    methods: { powerOn() { this.$store.dispatch('controls/hostPowerOn') }} │
+│  │         │                                                              │ │
+│  │         v                                                              │ │
+│  │  Vuex Store: ControlStore.js                                           │ │
+│  │    async hostPowerOn({ dispatch }) {                                   │ │
+│  │      return api.post('/redfish/v1/Systems/system/Actions/...');        │ │
+│  │    }                                                                   │ │
+│  │         │                                                              │ │
+│  │         v                                                              │ │
+│  │  Axios API Client: store/api.js                                        │ │
+│  │    - Add X-Auth-Token header                                           │ │
+│  │    - Handle response/errors                                            │ │
+│  │    - CSRF token handling                                               │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│            │                                                                │
+│            │  HTTPS POST /redfish/v1/Systems/system/Actions/...             │
+│            │  Headers: X-Auth-Token: <session-token>                        │
+│            │  Body: {"ResetType": "On"}                                     │
+│            v                                                                │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                           bmcweb                                       │ │
+│  │                                                                        │ │
+│  │  1. TLS Termination (Boost.Beast SSL context)                          │ │
+│  │         │                                                              │ │
+│  │         v                                                              │ │
+│  │  2. Session Validation                                                 │ │
+│  │     - Check X-Auth-Token in SessionStore                               │ │
+│  │     - Verify session not expired                                       │ │
+│  │     - Get user privileges                                              │ │
+│  │         │                                                              │ │
+│  │         v                                                              │ │
+│  │  3. Route Dispatch                                                     │ │
+│  │     App::routing -> ComputerSystemReset handler                        │ │
+│  │         │                                                              │ │
+│  │         v                                                              │ │
+│  │  4. Privilege Check                                                    │ │
+│  │     Requires: ConfigureComponents privilege                            │ │
+│  │         │                                                              │ │
+│  │         v                                                              │ │
+│  │  5. D-Bus Call                                                         │ │
+│  │     crow::connections::systemBus->async_method_call(                   │ │
+│  │       "xyz.openbmc_project.State.Host",                                │ │
+│  │       "/xyz/openbmc_project/state/host0",                              │ │
+│  │       "org.freedesktop.DBus.Properties", "Set",                        │ │
+│  │       "xyz.openbmc_project.State.Host",                                │ │
+│  │       "RequestedHostTransition",                                       │ │
+│  │       variant("xyz.openbmc_project.State.Host.Transition.On")          │ │
+│  │     );                                                                 │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│            │                                                                │
+│            v                                                                │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                 phosphor-state-manager                                 │ │
+│  │                                                                        │ │
+│  │  Property Set Handler:                                                 │ │
+│  │    - Validate transition request                                       │ │
+│  │    - Trigger GPIO power sequence                                       │ │
+│  │    - Update CurrentHostState asynchronously                            │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Vuex State Management Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      Vuex Store Architecture                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                        Root Store (store/index.js)                     │ │
+│  │                                                                        │ │
+│  │  state: {                                                              │ │
+│  │    // Global state only                                                │ │
+│  │  }                                                                     │ │
+│  │                                                                        │ │
+│  │  modules: {                                                            │ │
+│  │    ┌─────────────────────┐  ┌─────────────────────┐                    │ │
+│  │    │ authentication      │  │ global              │                    │ │
+│  │    │ ├─ authToken        │  │ ├─ serverStatus    │                    │ │
+│  │    │ ├─ isAuthenticated  │  │ ├─ languagePrefs   │                    │ │
+│  │    │ └─ sessionUri       │  │ └─ themeSettings   │                    │ │
+│  │    └─────────────────────┘  └─────────────────────┘                    │ │
+│  │                                                                        │ │
+│  │    ┌─────────────────────┐  ┌─────────────────────┐                    │ │
+│  │    │ sensors             │  │ controls            │                    │ │
+│  │    │ ├─ allSensors[]     │  │ ├─ hostState       │                    │ │
+│  │    │ ├─ selectedSensor   │  │ ├─ chassisState    │                    │ │
+│  │    │ └─ sensorHistory[]  │  │ └─ bootSettings    │                    │ │
+│  │    └─────────────────────┘  └─────────────────────┘                    │ │
+│  │                                                                        │ │
+│  │    ┌─────────────────────┐  ┌─────────────────────┐                    │ │
+│  │    │ eventLog            │  │ serverLed           │                    │ │
+│  │    │ ├─ allEvents[]      │  │ ├─ indicatorLed    │                    │ │
+│  │    │ ├─ filteredEvents[] │  │ └─ locationLed     │                    │ │
+│  │    │ └─ eventCount       │  └─────────────────────┘                    │ │
+│  │    └─────────────────────┘                                             │ │
+│  │                                                                        │ │
+│  │    ... additional modules for firmware, network, users, etc.           │ │
+│  │  }                                                                     │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Data Flow Pattern:                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  Component ──dispatch──> Actions ──commit──> Mutations ──> State       │ │
+│  │      │                      │                                │         │ │
+│  │      │                      │ (async API calls)              │         │ │
+│  │      │                      v                                │         │ │
+│  │      │               api.get/post()                          │         │ │
+│  │      │                      │                                │         │ │
+│  │      │                      v                                │         │ │
+│  │      │               Redfish Response                        │         │ │
+│  │      │                      │                                │         │ │
+│  │      │              commit('setData', response)              │         │ │
+│  │      │                                                       │         │ │
+│  │      <────────mapGetters/mapState────────────────────────────┘         │ │
+│  │      (reactive updates via Vue reactivity system)                      │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Session Authentication Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       Redfish Session Authentication                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Login Flow:                                                                │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │  1. User submits credentials via Login.vue                             │ │
+│  │     ┌──────────────────────────────────────────────────────────────┐   │ │
+│  │     │  POST /redfish/v1/SessionService/Sessions                   │   │ │
+│  │     │  Content-Type: application/json                             │   │ │
+│  │     │  Body: { "UserName": "root", "Password": "0penBmc" }        │   │ │
+│  │     └──────────────────────────────────────────────────────────────┘   │ │
+│  │                              │                                         │ │
+│  │                              v                                         │ │
+│  │  2. bmcweb validates credentials via PAM                               │ │
+│  │     ┌──────────────────────────────────────────────────────────────┐   │ │
+│  │     │  pamAuthenticateUser(username, password)                    │   │ │
+│  │     │    -> pam_unix.so checks /etc/shadow                        │   │ │
+│  │     │    -> Returns PAM_SUCCESS or PAM_AUTH_ERR                   │   │ │
+│  │     └──────────────────────────────────────────────────────────────┘   │ │
+│  │                              │                                         │ │
+│  │                              v                                         │ │
+│  │  3. bmcweb creates session and returns token                           │ │
+│  │     ┌──────────────────────────────────────────────────────────────┐   │ │
+│  │     │  HTTP 201 Created                                           │   │ │
+│  │     │  Location: /redfish/v1/SessionService/Sessions/abc123       │   │ │
+│  │     │  X-Auth-Token: <64-char-random-token>                       │   │ │
+│  │     │                                                             │   │ │
+│  │     │  Body: {                                                    │   │ │
+│  │     │    "@odata.id": "/redfish/v1/SessionService/Sessions/abc123",│   │ │
+│  │     │    "UserName": "root"                                       │   │ │
+│  │     │  }                                                          │   │ │
+│  │     └──────────────────────────────────────────────────────────────┘   │ │
+│  │                              │                                         │ │
+│  │                              v                                         │ │
+│  │  4. WebUI stores token in Vuex (memory only - not localStorage)        │ │
+│  │     ┌──────────────────────────────────────────────────────────────┐   │ │
+│  │     │  commit('setAuthToken', response.headers['x-auth-token']);  │   │ │
+│  │     │  commit('setSessionUri', response.headers['location']);     │   │ │
+│  │     └──────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Session Storage in bmcweb:                                                 │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  SessionStore (in-memory map):                                         │ │
+│  │                                                                        │ │
+│  │  sessions_["abc123"] = {                                               │ │
+│  │    uniqueId: "abc123",                                                 │ │
+│  │    sessionToken: "<64-char-token>",                                    │ │
+│  │    username: "root",                                                   │ │
+│  │    csrfToken: "<csrf-token>",                                          │ │
+│  │    clientIp: "192.168.1.100",                                          │ │
+│  │    createdTime: <timestamp>,                                           │ │
+│  │    lastUpdatedTime: <timestamp>,                                       │ │
+│  │    userRole: "Administrator"                                           │ │
+│  │  }                                                                     │ │
+│  │                                                                        │ │
+│  │  Session Timeout: 30 minutes (configurable)                            │ │
+│  │  Max Sessions: 10 per user (configurable)                              │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Authenticated Request:                                                     │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  GET /redfish/v1/Systems/system                                        │ │
+│  │  X-Auth-Token: <session-token>                                         │ │
+│  │                                                                        │ │
+│  │  bmcweb validation:                                                    │ │
+│  │  1. Extract token from X-Auth-Token header                             │ │
+│  │  2. Look up session by token in SessionStore                           │ │
+│  │  3. Check session not expired                                          │ │
+│  │  4. Update lastUpdatedTime (session keep-alive)                        │ │
+│  │  5. Attach user privileges to request context                          │ │
+│  │  6. Process request with user's RBAC privileges                        │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### WebSocket Event Streaming
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     Server-Sent Events (SSE) Architecture                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  WebUI uses SSE for real-time updates (sensors, logs, state changes):      │
+│                                                                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  Browser                              bmcweb                            │ │
+│  │                                                                        │ │
+│  │  EventSource('/redfish/v1/SSE')  ──> SSE Handler                       │ │
+│  │        │                                   │                           │ │
+│  │        │ HTTP/1.1 200 OK                   │                           │ │
+│  │        │ Content-Type: text/event-stream   │                           │ │
+│  │        │ Cache-Control: no-cache           │                           │ │
+│  │        │ Connection: keep-alive            │                           │ │
+│  │        │                                   │                           │ │
+│  │        │<────── Keep connection open ──────│                           │ │
+│  │        │                                   │                           │ │
+│  │        │                            ┌──────┴──────┐                    │ │
+│  │        │                            │ D-Bus Match │                    │ │
+│  │        │                            │ Subscriptions│                    │ │
+│  │        │                            └──────┬──────┘                    │ │
+│  │        │                                   │                           │ │
+│  │        │                            PropertiesChanged signal           │ │
+│  │        │                                   │                           │ │
+│  │        │<──── data: {"...sensor update..."}                            │ │
+│  │        │                                   │                           │ │
+│  │        v                                   │                           │ │
+│  │  onmessage(event) {                        │                           │ │
+│  │    const data = JSON.parse(event.data);    │                           │ │
+│  │    store.commit('sensors/update', data);   │                           │ │
+│  │  }                                         │                           │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  SSE Message Format:                                                        │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  event: ResourceChanged                                                │ │
+│  │  id: 12345                                                             │ │
+│  │  data: {                                                               │ │
+│  │    "@odata.type": "#Event.v1_0_0.Event",                               │ │
+│  │    "Events": [{                                                        │ │
+│  │      "EventType": "ResourceChanged",                                   │ │
+│  │      "MessageId": "ResourceEvent.1.0.ResourceChanged",                 │ │
+│  │      "OriginOfCondition": {                                            │ │
+│  │        "@odata.id": "/redfish/v1/Chassis/chassis/Sensors/CPU_Temp"     │ │
+│  │      },                                                                │ │
+│  │      "Message": "Sensor reading changed"                               │ │
+│  │    }]                                                                  │ │
+│  │  }                                                                     │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Build and Bundle Process
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      WebUI Build Pipeline                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Source Files                                                               │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  webui-vue/                                                            │ │
+│  │  ├── src/                                                              │ │
+│  │  │   ├── views/           # Page components (*.vue)                    │ │
+│  │  │   ├── components/      # Shared components                          │ │
+│  │  │   ├── store/           # Vuex modules                               │ │
+│  │  │   │   ├── api.js       # Axios configuration                        │ │
+│  │  │   │   ├── index.js     # Store root                                 │ │
+│  │  │   │   └── modules/     # Feature stores                             │ │
+│  │  │   ├── router/          # Vue Router config                          │ │
+│  │  │   ├── locales/         # i18n translations                          │ │
+│  │  │   ├── assets/          # Images, styles                             │ │
+│  │  │   └── main.js          # App entry point                            │ │
+│  │  └── vue.config.js        # Build configuration                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                              │                                              │
+│                              v                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                     Vue CLI / Webpack Build                            │ │
+│  │                                                                        │ │
+│  │  npm run build                                                         │ │
+│  │    │                                                                   │ │
+│  │    ├── Compile .vue SFC (Single File Components)                       │ │
+│  │    │   - Extract template -> render function                           │ │
+│  │    │   - Extract script -> JS module                                   │ │
+│  │    │   - Extract style -> CSS                                          │ │
+│  │    │                                                                   │ │
+│  │    ├── Process SCSS -> CSS                                             │ │
+│  │    │                                                                   │ │
+│  │    ├── Tree-shake unused code                                          │ │
+│  │    │                                                                   │ │
+│  │    ├── Minify JS/CSS                                                   │ │
+│  │    │                                                                   │ │
+│  │    └── Generate dist/                                                  │ │
+│  │                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                              │                                              │
+│                              v                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  dist/                              Deployed to BMC:                   │ │
+│  │  ├── index.html                     /usr/share/www/                    │ │
+│  │  ├── favicon.ico                    ├── index.html                     │ │
+│  │  └── js/                            ├── favicon.ico                    │ │
+│  │      ├── app.[hash].js    (~200KB)  └── js/                            │ │
+│  │      ├── chunk-vendors.[hash].js    (Vue, Bootstrap, Axios)            │ │
+│  │      └── [route-chunk].[hash].js    (Code-split per route)             │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Yocto Integration:                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  # meta-phosphor/recipes-phosphor/webui/webui-vue_git.bb               │ │
+│  │                                                                        │ │
+│  │  do_compile() {                                                        │ │
+│  │    npm install                                                         │ │
+│  │    npm run build                                                       │ │
+│  │  }                                                                     │ │
+│  │                                                                        │ │
+│  │  do_install() {                                                        │ │
+│  │    install -d ${D}${datadir}/www                                       │ │
+│  │    cp -r ${S}/dist/* ${D}${datadir}/www/                               │ │
+│  │  }                                                                     │ │
+│  │                                                                        │ │
+│  │  # bmcweb serves files from /usr/share/www/                            │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code References
+
+| Component | Repository | Key Files |
+|-----------|------------|-----------|
+| WebUI Application | [openbmc/webui-vue](https://github.com/openbmc/webui-vue) | `src/main.js`, `src/App.vue` |
+| Vuex Stores | [openbmc/webui-vue](https://github.com/openbmc/webui-vue) | `src/store/modules/` |
+| API Client | [openbmc/webui-vue](https://github.com/openbmc/webui-vue) | `src/store/api.js` |
+| Router Configuration | [openbmc/webui-vue](https://github.com/openbmc/webui-vue) | `src/router/index.js`, `src/router/routes.js` |
+| bmcweb Static Hosting | [openbmc/bmcweb](https://github.com/openbmc/bmcweb) | `http/http_server.hpp`, `include/webassets.hpp` |
+| Session Management | [openbmc/bmcweb](https://github.com/openbmc/bmcweb) | `include/sessions.hpp`, `redfish-core/lib/redfish_sessions.hpp` |
+| SSE Implementation | [openbmc/bmcweb](https://github.com/openbmc/bmcweb) | `include/server_sent_events.hpp` |
+
+---
+
 {: .note }
 **Tested on**: OpenBMC master, QEMU romulus
