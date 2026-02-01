@@ -42,4 +42,4 @@ If you're eager to get started:
 3. **[OpenBMC Overview]({% link docs/02-architecture/01-openbmc-overview.md %})** - Understand the architecture
 
 {: .tip }
-If you encounter issues, check the [Troubleshooting](#) section or search the [OpenBMC mailing list](https://lists.ozlabs.org/listinfo/openbmc).
+If you encounter issues, check the [Troubleshooting]({% link docs/01-getting-started/03-first-build.md %}#troubleshooting) section or search the [OpenBMC mailing list](https://lists.ozlabs.org/listinfo/openbmc).
