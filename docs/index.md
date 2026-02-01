@@ -44,7 +44,7 @@ Welcome to the comprehensive OpenBMC development guide. This tutorial takes you 
 
 ## Sample Code
 
-All examples in this guide are tested and available in the [examples/](https://github.com/YOUR_ORG/openbmc-guide-tutorial/tree/main/examples) directory. Each example includes:
+All examples in this guide are tested and available in the [examples/](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples) directory. Each example includes:
 
 - Complete, buildable code
 - README with setup instructions
