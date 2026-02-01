@@ -596,6 +596,249 @@ systemctl stop phosphor-pid-control
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for thermal control developers.
+
+### PID Mathematics
+
+The PID controller in phosphor-pid-control uses discrete-time calculations:
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    PID Control Loop (per sample period)                  │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   error = setpoint - current_temperature                                 │
+│                                                                          │
+│   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                │
+│   │ Proportional│     │  Integral   │     │ Derivative  │                │
+│   │             │     │             │     │             │                │
+│   │  P = Kp × e │     │ I += Ki × e │     │ D = Kd × Δe │                │
+│   │             │     │   × dt      │     │     / dt    │                │
+│   └──────┬──────┘     └──────┬──────┘     └──────┬──────┘                │
+│          │                   │                   │                       │
+│          └───────────────────┼───────────────────┘                       │
+│                              │                                           │
+│                              ▼                                           │
+│                    output = P + I + D + FF                               │
+│                              │                                           │
+│                              ▼                                           │
+│                    output = clamp(output, outLim_min, outLim_max)        │
+│                              │                                           │
+│                              ▼                                           │
+│                    output = apply_slew_rate(output, previous_output)     │
+│                              │                                           │
+│                              ▼                                           │
+│                         Fan PWM %                                        │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**Why negative integral coefficient?**
+
+For cooling control, we want:
+- Temperature **above** setpoint → **increase** fan speed
+- `error = setpoint - temperature` is **negative** when too hot
+- Negative `Ki` × negative `error` = **positive** output increase
+
+```
+Example:
+  setpoint = 80°C, temperature = 85°C
+  error = 80 - 85 = -5
+  Ki = -0.2
+  I contribution = -0.2 × -5 = +1.0  (increases PWM)
+```
+
+### Anti-Windup Implementation
+
+**Integral windup** occurs when the integral term accumulates excessively during sustained error, causing overshoot when the system finally responds.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     Integral Windup Prevention                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Without Anti-Windup:           With Anti-Windup:                      │
+│                                                                         │
+│   Integral                       Integral                               │
+│      ▲                              ▲                                   │
+│      │    ╱──────                   │    ╱──── integralLimit_max        │
+│      │   ╱                          │   ╱                               │
+│      │  ╱  (accumulates             │  ╱  (clamped at limit)            │
+│      │ ╱    indefinitely)           │ ╱                                 │
+│      │╱                             │╱                                  │
+│   ───┼────────► time             ───┼────────► time                     │
+│      │                              │                                   │
+│                                                                         │
+│   Code implementation (pid/ec/pid.cpp):                                 │
+│                                                                         │
+│   integral += Ki * error * dt;                                          │
+│   integral = std::clamp(integral, integralLimit_min, integralLimit_max);│
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Configuration guidelines:**
+- `integralLimit_max`: Should match `outLim_max` (typically 100.0)
+- `integralLimit_min`: Usually 0.0 for cooling-only systems
+
+### Slew Rate Limiting
+
+Slew rate limits prevent sudden fan speed changes that cause acoustic disturbance:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      Slew Rate Limiting                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   PWM %                                                                 │
+│    100 ┤                    ╭───────────── Target                       │
+│        │                  ╱                                             │
+│     80 ┤                ╱   ← slewPos limits ramp-up rate               │
+│        │              ╱                                                 │
+│     60 ┤            ╱                                                   │
+│        │          ╱                                                     │
+│     40 ┤        ╱                                                       │
+│        │      ╱                                                         │
+│     20 ┤────╱                                                           │
+│        │                                                                │
+│        └────────────────────────────────────────────────────► time      │
+│                                                                         │
+│   Algorithm:                                                            │
+│                                                                         │
+│   delta = new_output - previous_output;                                 │
+│   if (delta > 0 && slewPos > 0) {                                       │
+│       delta = min(delta, slewPos * samplePeriod);                       │
+│   } else if (delta < 0 && slewNeg > 0) {                                │
+│       delta = max(delta, -slewNeg * samplePeriod);                      │
+│   }                                                                     │
+│   output = previous_output + delta;                                     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Example calculation:**
+- Current PWM: 40%, Target: 80%
+- `slewPos`: 10.0 (%/second)
+- `samplePeriod`: 1.0 second
+- Max change per cycle: 10% → Output: 50% (not 80%)
+- After 4 cycles: 40% → 50% → 60% → 70% → 80%
+
+### Failsafe Trigger Conditions
+
+Failsafe mode sets all fans to `failsafePercent` (typically 100%) when:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     Failsafe Trigger Conditions                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   1. SENSOR TIMEOUT                                                     │
+│      └─ Sensor value not updated within timeout period                  │
+│      └─ Default: 2 × samplePeriod                                       │
+│      └─ Check: sensor returns NaN or error on D-Bus read                │
+│                                                                         │
+│   2. SENSOR MISSING                                                     │
+│      └─ Required input sensor not found on D-Bus                        │
+│      └─ Occurs during startup or sensor service crash                   │
+│                                                                         │
+│   3. FAN FAILURE                                                        │
+│      └─ Tachometer reads 0 RPM when PWM > minimum                       │
+│      └─ Indicates stuck or disconnected fan                             │
+│                                                                         │
+│   4. THERMAL RUNAWAY                                                    │
+│      └─ Temperature exceeds critical threshold                          │
+│      └─ Fans cannot maintain setpoint at 100% PWM                       │
+│                                                                         │
+│   Recovery:                                                             │
+│   └─ Automatic when all sensors return to normal                        │
+│   └─ Requires valid readings for "recovery delay" period                │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Source reference**: [pid/zone.cpp](https://github.com/openbmc/phosphor-pid-control/blob/master/pid/zone.cpp)
+
+### Control Loop Timing
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Control Loop Execution                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐          │
+│   │  t=0s    │    │  t=1s    │    │  t=2s    │    │  t=3s    │          │
+│   └────┬─────┘    └────┬─────┘    └────┬─────┘    └────┬─────┘          │
+│        │               │               │               │                │
+│        ▼               ▼               ▼               ▼                │
+│   ┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐           │
+│   │Read     │     │Read     │     │Read     │     │Read     │           │
+│   │Sensors  │     │Sensors  │     │Sensors  │     │Sensors  │           │
+│   └────┬────┘     └────┬────┘     └────┬────┘     └────┬────┘           │
+│        │               │               │               │                │
+│        ▼               ▼               ▼               ▼                │
+│   ┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐           │
+│   │Run PID  │     │Run PID  │     │Run PID  │     │Run PID  │           │
+│   │Calc     │     │Calc     │     │Calc     │     │Calc     │           │
+│   └────┬────┘     └────┬────┘     └────┬────┘     └────┬────┘           │
+│        │               │               │               │                │
+│        ▼               ▼               ▼               ▼                │
+│   ┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐           │
+│   │Write    │     │Write    │     │Write    │     │Write    │           │
+│   │PWM      │     │PWM      │     │PWM      │     │PWM      │           │
+│   └─────────┘     └─────────┘     └─────────┘     └─────────┘           │
+│                                                                         │
+│   samplePeriod = 1.0s (configurable per PID)                            │
+│   Zones may have different sample periods                               │
+│   Shorter period = faster response, more CPU usage                      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Multi-Sensor Zone Arbitration
+
+When multiple PID controllers exist in a zone, outputs are arbitrated:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Multi-Sensor Arbitration                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Zone 0 contains:                                                      │
+│   ├── CPU_Temp PID    → output: 45%                                     │
+│   ├── DIMM_Temp PID   → output: 60%                                     │
+│   └── Inlet_Temp PID  → output: 35%                                     │
+│                                                                         │
+│   Arbitration: MAX(all outputs)                                         │
+│   └── Final zone output: 60% (highest demand wins)                      │
+│                                                                         │
+│   All fans in zone receive this output:                                 │
+│   ├── Fan0 PWM = 60%                                                    │
+│   ├── Fan1 PWM = 60%                                                    │
+│   └── Fan2 PWM = 60%                                                    │
+│                                                                         │
+│   Rationale: Prevents any component from overheating                    │
+│   Trade-off: May over-cool some components                              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files in [phosphor-pid-control](https://github.com/openbmc/phosphor-pid-control):
+
+| File | Description |
+|------|-------------|
+| `pid/ec/pid.cpp` | Core PID algorithm implementation |
+| `pid/zone.cpp` | Zone management and failsafe logic |
+| `pid/thermalcontroller.cpp` | Temperature PID controller |
+| `pid/fancontroller.cpp` | Fan speed PID controller |
+| `conf.hpp` | Configuration structures |
+| `pid/builder.cpp` | Configuration parser |
+
+---
+
 ## References
 
 - [phosphor-pid-control](https://github.com/openbmc/phosphor-pid-control)

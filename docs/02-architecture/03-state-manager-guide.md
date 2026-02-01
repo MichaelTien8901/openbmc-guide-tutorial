@@ -590,6 +590,321 @@ systemctl status phosphor-reset-host-recovery@0.service
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for state manager developers.
+
+### State Machine Internals
+
+The state managers implement finite state machines with well-defined transitions:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Host State Machine                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│                            ┌───────────────┐                            │
+│              ┌────────────▶│   Quiesced    │◀────────────┐              │
+│              │             │  (error state)│             │              │
+│              │             └───────────────┘             │              │
+│              │                     │                     │              │
+│              │ error               │ recover             │ error        │
+│              │                     ▼                     │              │
+│       ┌──────┴──────┐       ┌───────────────┐     ┌──────┴──────┐       │
+│       │             │       │               │     │             │       │
+│       │     Off     │◀──────│   Transition  │────▶│   Running   │       │
+│       │             │       │    States     │     │             │       │
+│       └──────┬──────┘       └───────────────┘     └──────┬──────┘       │
+│              │                                           │              │
+│              │              Transition.On                │              │
+│              └───────────────────────────────────────────┘              │
+│                             Transition.Off                              │
+│                                                                         │
+│   Internal Transition States:                                           │
+│   ├── TransitioningToOff  (shutdown in progress)                        │
+│   ├── TransitioningToRunning (boot in progress)                         │
+│   └── TransitioningToQuiesced (error handling)                          │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**State transition triggers:**
+
+| Event | Source | Transition |
+|-------|--------|------------|
+| D-Bus RequestedHostTransition | User/Redfish | Off→Running, Running→Off |
+| Power Good GPIO change | Hardware | Off→Running (assert), Running→Off (deassert) |
+| Watchdog timeout | Watchdog service | Running→Quiesced |
+| Boot failure (max retries) | Boot counter | Running→Quiesced |
+
+**Source reference**: [host_state_manager.cpp](https://github.com/openbmc/phosphor-state-manager/blob/master/host_state_manager.cpp)
+
+### GPIO Power Control Sequence
+
+Power on/off involves precise GPIO sequencing:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Power On GPIO Sequence                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Time ──────────────────────────────────────────────────────────────▶  │
+│                                                                         │
+│   POWER_BTN    ───┐     ┌─────────────────────────────────────────────  │
+│   (active low)    └─────┘ (100-500ms pulse)                             │
+│                                                                         │
+│   ATX_PS_ON    ─────────────────┐                                       │
+│                                 └─────────────────────────────────────  │
+│                                                                         │
+│   POWER_GOOD   ─────────────────────────┐                               │
+│                                         └─────────────────────────────  │
+│                     │           │       │                               │
+│                     │           │       └─ State → Running              │
+│                     │           └─ Wait for power good (timeout: 10s)   │
+│                     └─ Power button pulse sent                          │
+│                                                                         │
+│   Implementation (power-control):                                       │
+│   1. Assert POWER_BTN GPIO low                                          │
+│   2. Wait powerPulseTimeMs (default: 200ms)                             │
+│   3. Deassert POWER_BTN GPIO high                                       │
+│   4. Wait for POWER_GOOD assert (timeout: powerOkWatchdogTimeMs)        │
+│   5. If timeout → retry or fail                                         │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Power off sequence (graceful):**
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Graceful Power Off Sequence                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   1. Send power button pulse (short press - ACPI S5 request)            │
+│   2. Wait for OS to initiate shutdown (gracefulPowerOffWaitTime)        │
+│   3. Wait for POWER_GOOD deassert                                       │
+│   4. If timeout → force power off (long press)                          │
+│                                                                         │
+│   Force Power Off (chassiskill):                                        │
+│   1. Assert POWER_BTN low for forcePowerOffTimeMs (4-10 seconds)        │
+│   2. This bypasses ACPI, directly cuts power                            │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Source reference**: [power-control](https://github.com/openbmc/x86-power-control) or platform-specific GPIO control
+
+### systemd Target Integration
+
+State transitions trigger systemd targets for service orchestration:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    systemd Target Hierarchy                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Power On Flow:                                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ RequestedHostTransition = On                                    │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ obmc-chassis-poweron@0.target                                   │   │
+│   │ ├── phosphor-psu-monitor.service                                │   │
+│   │ ├── phosphor-fan-monitor.service                                │   │
+│   │ └── (platform power sequencing services)                        │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │ After=                                 │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ obmc-host-startmin@0.target                                     │   │
+│   │ ├── phosphor-host-state-manager.service                         │   │
+│   │ └── (minimal host services)                                     │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │ After=                                 │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ obmc-host-start@0.target                                        │   │
+│   │ ├── phosphor-watchdog.service                                   │   │
+│   │ ├── phosphor-ipmi-host.service                                  │   │
+│   │ └── (full host services)                                        │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Power Off Flow:                                                       │
+│   obmc-host-stop@0.target → obmc-chassis-poweroff@0.target              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Adding platform-specific services:**
+
+```ini
+# /lib/systemd/system/platform-power-on.service
+[Unit]
+Description=Platform-specific power on sequence
+After=obmc-chassis-poweron@0.target
+Before=obmc-host-startmin@0.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/platform-power-sequence --on
+RemainAfterExit=yes
+
+[Install]
+WantedBy=obmc-host-start@0.target
+```
+
+### Boot Count and Auto-Recovery
+
+The boot counter tracks failed boot attempts and triggers recovery:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Boot Counter Implementation                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Boot Attempt Tracking:                                                │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ D-Bus: xyz.openbmc_project.State.Boot.Raw                       │   │
+│   │ Path:  /xyz/openbmc_project/state/host0                         │   │
+│   │ Properties:                                                     │   │
+│   │   ├── BootRaw - Current boot count (persistent)                 │   │
+│   │   └── AttemptsLeft - Remaining retries before quiesce           │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Boot Flow:                                                            │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐          │
+│   │ Power On │───▶│ Boot     │───▶│ Boot     │───▶│ Success  │          │
+│   │          │    │ Count++  │    │ Watchdog │    │ Count=0  │          │
+│   └──────────┘    └──────────┘    └────┬─────┘    └──────────┘          │
+│                                        │                                │
+│                                        │ Timeout                        │
+│                                        ▼                                │
+│                                   ┌──────────┐                          │
+│                                   │ Check    │                          │
+│                                   │ Attempts │                          │
+│                                   └────┬─────┘                          │
+│                                        │                                │
+│                        ┌───────────────┴───────────────┐                │
+│                        │                               │                │
+│                        ▼                               ▼                │
+│                   Attempts > 0                    Attempts = 0          │
+│                   ┌──────────┐                    ┌──────────┐          │
+│                   │ Reboot   │                    │ Quiesce  │          │
+│                   │ (retry)  │                    │ (stop)   │          │
+│                   └──────────┘                    └──────────┘          │
+│                                                                         │
+│   Configuration:                                                        │
+│   └── BOOT_COUNT_MAX_ALLOWED (default: 3)                               │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Boot count reset conditions:**
+- OS signals successful boot via IPMI
+- Host reaches `OSRunning` boot progress
+- Manual reset via `obmcutil recover`
+
+### Power Restore Policy Implementation
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Power Restore Policy Flow                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   AC Power Restored:                                                    │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ BMC boots → discover-system-state.service runs                  │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ Read PowerRestorePolicy from D-Bus Settings                     │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│            ┌───────────────────┼───────────────────┐                    │
+│            │                   │                   │                    │
+│            ▼                   ▼                   ▼                    │
+│       ┌─────────┐        ┌──────────┐        ┌─────────┐                │
+│       │AlwaysOn │        │ Restore  │        │AlwaysOff│                │
+│       └────┬────┘        └────┬─────┘        └────┬────┘                │
+│            │                  │                   │                     │
+│            ▼                  ▼                   ▼                     │
+│       Power On          Read last state      Stay Off                   │
+│                         from persistent                                 │
+│                         storage                                         │
+│                              │                                          │
+│                    ┌─────────┴─────────┐                                │
+│                    │                   │                                │
+│                    ▼                   ▼                                │
+│               Was Running         Was Off                               │
+│               ┌─────────┐        ┌─────────┐                            │
+│               │Power On │        │Stay Off │                            │
+│               └─────────┘        └─────────┘                            │
+│                                                                         │
+│   Persistent State Storage:                                             │
+│   └── /var/lib/phosphor-state-manager/chassisStateX/POH (Power-On-Hours)│
+│   └── /var/lib/phosphor-state-manager/hostStateX/state                  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Source reference**: [discover_system_state.cpp](https://github.com/openbmc/phosphor-state-manager/blob/master/discover_system_state.cpp)
+
+### Watchdog Integration
+
+The host watchdog monitors for hangs during boot and runtime:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Watchdog Interaction                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Host Boot:                                                            │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ 1. State Manager sets RequestedHostTransition = On              │   │
+│   │ 2. Watchdog service starts with boot timeout (default: 5 min)   │   │
+│   │ 3. Host BIOS/OS pokes watchdog via IPMI periodically            │   │
+│   │ 4. On successful boot, OS disables watchdog or sets new timeout │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Watchdog Expiry Actions:                                              │
+│   ┌──────────────┬─────────────────────────────────────────────────┐    │
+│   │ Action       │ Behavior                                        │    │
+│   ├──────────────┼─────────────────────────────────────────────────┤    │
+│   │ None         │ Log event only                                  │    │
+│   │ HardReset    │ Reset host (reboot)                             │    │
+│   │ PowerOff     │ Power off host                                  │    │
+│   │ PowerCycle   │ Power off, wait, power on                       │    │
+│   └──────────────┴─────────────────────────────────────────────────┘    │
+│                                                                         │
+│   D-Bus Watchdog Interface:                                             │
+│   xyz.openbmc_project.State.Watchdog at /xyz/openbmc_project/watchdog/  │
+│   ├── Enabled (bool)      - Watchdog active                             │
+│   ├── Interval (uint64)   - Timeout in milliseconds                     │
+│   ├── TimeRemaining       - Time until expiry                           │
+│   └── ExpireAction        - Action on timeout                           │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files in [phosphor-state-manager](https://github.com/openbmc/phosphor-state-manager):
+
+| File | Description |
+|------|-------------|
+| `bmc_state_manager.cpp` | BMC state tracking |
+| `chassis_state_manager.cpp` | Chassis power control |
+| `host_state_manager.cpp` | Host state machine |
+| `discover_system_state.cpp` | Power restore policy |
+| `settings.cpp` | Persistent settings storage |
+| `scheduled_host_transition.cpp` | Scheduled power on/off |
+
+---
+
 ## References
 
 - [phosphor-state-manager](https://github.com/openbmc/phosphor-state-manager)

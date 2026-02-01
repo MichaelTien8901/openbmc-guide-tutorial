@@ -1327,5 +1327,217 @@ systemctl status pldmd mctpd
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for MCTP/PLDM developers.
+
+### MCTP Message Fragmentation
+
+Large PLDM messages are fragmented across multiple MCTP packets:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    MCTP Message Fragmentation                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   PLDM Message (e.g., 500 bytes):                                       │
+│   ┌────────────────────────────────────────────────────────────────┐    │
+│   │                    PLDM Request/Response Data                  │    │
+│   │                         (500 bytes)                            │    │
+│   └────────────────────────────────────────────────────────────────┘    │
+│                                   │                                     │
+│                                   ▼                                     │
+│   MCTP Fragmentation (MTU = 64 bytes per binding):                      │
+│                                                                         │
+│   Packet 1 (SOM=1, EOM=0):                                              │
+│   ┌────────┬────────────────────────────────────────────────────────┐   │
+│   │ Header │ Data[0:63]                                             │   │
+│   │ SOM=1  │                                                        │   │
+│   │ EOM=0  │                                                        │   │
+│   │ Seq=0  │                                                        │   │
+│   └────────┴────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Packet 2 (SOM=0, EOM=0):                                              │
+│   ┌────────┬────────────────────────────────────────────────────────┐   │
+│   │ Header │ Data[64:127]                                           │   │
+│   │ SOM=0  │                                                        │   │
+│   │ EOM=0  │                                                        │   │
+│   │ Seq=1  │                                                        │   │
+│   └────────┴────────────────────────────────────────────────────────┘   │
+│                          ...                                            │
+│   Packet N (SOM=0, EOM=1):                                              │
+│   ┌────────┬────────────────────────────────────────────────────────┐   │
+│   │ Header │ Data[remaining]                                        │   │
+│   │ SOM=0  │                                                        │   │
+│   │ EOM=1  │ ← End of Message                                       │   │
+│   │ Seq=7  │                                                        │   │
+│   └────────┴────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Header Flags:                                                         │
+│   ├── SOM (Start of Message) - First fragment                           │
+│   ├── EOM (End of Message) - Last fragment                              │
+│   ├── Seq (Sequence) - 2-bit, wraps 0-3                                 │
+│   └── Tag - Correlates request/response                                 │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### PLDM Message Type Encoding
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    PLDM Message Structure                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Request Message Format:                                               │
+│   ┌────────┬──────────┬──────────┬─────────────────────────────────┐    │
+│   │ Byte 0 │  Byte 1  │  Byte 2  │        Bytes 3-N                │    │
+│   ├────────┼──────────┼──────────┼─────────────────────────────────┤    │
+│   │Instance│   Type   │ Command  │       Request Data              │    │
+│   │ ID/Rq  │(0-6 DMTF)│          │                                 │    │
+│   └────────┴──────────┴──────────┴─────────────────────────────────┘    │
+│                                                                         │
+│   Byte 0 breakdown:                                                     │
+│   ┌─────┬─────┬──────────────┐                                          │
+│   │ D/Rq│ Rsvd│ Instance ID  │                                          │
+│   │ 1b  │ 1b  │    5 bits    │                                          │
+│   └─────┴─────┴──────────────┘                                          │
+│   D=0: Request, D=1: Response                                           │
+│   Rq=1: Request message, Rq=0: Response message                         │
+│                                                                         │
+│   Response Message Format:                                              │
+│   ┌────────┬──────────┬──────────┬───────────┬──────────────────┐       │
+│   │Instance│   Type   │ Command  │Completion │   Response Data  │       │
+│   │ ID/D=1 │          │          │   Code    │                  │       │
+│   └────────┴──────────┴──────────┴───────────┴──────────────────┘       │
+│                                                                         │
+│   PLDM Types:                                                           │
+│   ┌──────┬────────────────────────────────────────────────────────┐     │
+│   │ Type │ Description                                            │     │
+│   ├──────┼────────────────────────────────────────────────────────┤     │
+│   │  0   │ PLDM Messaging Control and Discovery                   │     │
+│   │  1   │ SMBIOS (not commonly used)                             │     │
+│   │  2   │ Platform Monitoring and Control (sensors, PDRs)        │     │
+│   │  3   │ BIOS Control and Configuration                         │     │
+│   │  4   │ FRU Data                                               │     │
+│   │  5   │ Firmware Update                                        │     │
+│   │  6   │ Redfish Device Enablement                              │     │
+│   └──────┴────────────────────────────────────────────────────────┘     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### PDR (Platform Descriptor Record) Database
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    PDR Repository Structure                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   PDR Repository (stored in pldmd):                                     │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ Record │ Type                    │ Description                  │   │
+│   ├────────┼─────────────────────────┼──────────────────────────────┤   │
+│   │   1    │ Terminus Locator (11)   │ BMC terminus info            │   │
+│   │   2    │ Numeric Sensor (2)      │ CPU temperature              │   │
+│   │   3    │ Numeric Sensor (2)      │ DIMM temperature             │   │
+│   │   4    │ Numeric Sensor (2)      │ Fan speed                    │   │
+│   │   5    │ Numeric Effecter (9)    │ Fan PWM control              │   │
+│   │   6    │ State Sensor (4)        │ Presence sensor              │   │
+│   │   7    │ FRU Record Set (20)     │ System FRU data              │   │
+│   │   ...  │ ...                     │ ...                          │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   PDR Record Common Header:                                             │
+│   ┌──────────┬────────────┬───────────┬────────────┬────────────────┐   │
+│   │Record Hdl│ PDR Header │Record Type│ Data Length│   Record Data  │   │
+│   │ (4 bytes)│  Version   │ (1 byte)  │  (2 bytes) │   (variable)   │   │
+│   └──────────┴────────────┴───────────┴────────────┴────────────────┘   │
+│                                                                         │
+│   Numeric Sensor PDR (Type 2) key fields:                               │
+│   ├── Sensor ID (2 bytes)                                               │
+│   ├── Entity Type (CPU, Memory, Fan, PSU, etc.)                         │
+│   ├── Entity Instance                                                   │
+│   ├── Sensor Init (thresholds, hysteresis)                              │
+│   ├── Unit (Degrees C, RPM, Volts, Amps, Watts)                         │
+│   ├── Resolution, Offset, Accuracy                                      │
+│   └── Threshold values (warning, critical, fatal)                       │
+│                                                                         │
+│   JSON PDR Configuration (pldm/pdr_jsons/):                             │
+│   {                                                                     │
+│       "pdrType": 2,                                                     │
+│       "sensorID": 1,                                                    │
+│       "entityType": 66,  // Processor                                   │
+│       "baseUnit": 2,     // Degrees C                                   │
+│       "warningHigh": 85.0,                                              │
+│       "criticalHigh": 95.0                                              │
+│   }                                                                     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Endpoint Discovery Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    MCTP Endpoint Discovery                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   BMC                                    Remote Endpoint                │
+│    │                                           │                        │
+│    │  1. MCTP Control: Get Endpoint ID         │                        │
+│    │──────────────────────────────────────────▶│                        │
+│    │◀──────────────────────────────────────────│ EID assigned: 0x08     │
+│    │                                           │                        │
+│    │  2. MCTP Control: Get Message Types       │                        │
+│    │──────────────────────────────────────────▶│                        │
+│    │◀──────────────────────────────────────────│ [PLDM, VDM]            │
+│    │                                           │                        │
+│    │  3. PLDM Type 0: GetTID                   │                        │
+│    │──────────────────────────────────────────▶│                        │
+│    │◀──────────────────────────────────────────│ TID: 1                 │
+│    │                                           │                        │
+│    │  4. PLDM Type 0: GetPLDMTypes             │                        │
+│    │──────────────────────────────────────────▶│                        │
+│    │◀──────────────────────────────────────────│ [Type 0, 2, 5]         │
+│    │                                           │                        │
+│    │  5. PLDM Type 0: GetPLDMCommands (Type 2) │                        │
+│    │──────────────────────────────────────────▶│                        │
+│    │◀──────────────────────────────────────────│ [cmd list for Type 2]  │
+│    │                                           │                        │
+│    │  6. PLDM Type 2: GetPDRRepositoryInfo     │                        │
+│    │──────────────────────────────────────────▶│                        │
+│    │◀──────────────────────────────────────────│ RepoSize, RecordCount  │
+│    │                                           │                        │
+│    │  7. PLDM Type 2: GetPDR (loop)            │                        │
+│    │──────────────────────────────────────────▶│                        │
+│    │◀──────────────────────────────────────────│ PDR records...         │
+│    │                                           │                        │
+│                                                                         │
+│   After discovery, pldmd creates D-Bus objects for each PDR:            │
+│   /xyz/openbmc_project/pldm/fru/...                                     │
+│   /xyz/openbmc_project/sensors/temperature/PLDM_Sensor_...              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files:
+
+| Repository | File | Description |
+|------------|------|-------------|
+| libpldm | `src/base.c` | Base message encode/decode |
+| libpldm | `src/platform.c` | Type 2 (Platform) messages |
+| libpldm | `src/fru.c` | Type 4 (FRU) messages |
+| libpldm | `src/fw_update.c` | Type 5 (Firmware Update) |
+| pldm | `pldmd/pldmd.cpp` | Main PLDM daemon |
+| pldm | `libpldmresponder/` | Response handlers |
+| pldm | `requester/` | Request handlers |
+| mctp | `src/mctp.c` | MCTP transport layer |
+
+---
+
 {: .note }
 **Tested on**: OpenBMC master, requires hardware with MCTP-capable endpoints. QEMU testing possible with mctp-serial loopback.

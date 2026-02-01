@@ -550,6 +550,248 @@ systemctl status xyz.openbmc_project.sel-logger
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for sensor developers.
+
+### Sensor Reading Pipeline
+
+Each sensor daemon follows a common pattern for reading and publishing sensor values:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Sensor Reading Pipeline                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   1. HARDWARE LAYER                                                     │
+│   ┌──────────────────────────────────────────────────────────────────┐  │
+│   │  I2C Device → Kernel Driver → sysfs/hwmon                        │  │
+│   │  Example: TMP75 at 0x48 → tmp75 driver → /sys/class/hwmon/hwmonN │  │
+│   └──────────────────────────────────────────────────────────────────┘  │
+│                                   │                                     │
+│                                   ▼                                     │
+│   2. SENSOR DAEMON (e.g., hwmontempsensor)                              │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │  a. Entity Manager signals new Configuration object             │   │
+│   │  b. Daemon matches Type (e.g., "TMP75") to its supported types  │   │
+│   │  c. Daemon locates hwmon sysfs path for bus/address             │   │
+│   │  d. Creates Sensor object with D-Bus interface                  │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                   │                                     │
+│                                   ▼                                     │
+│   3. POLLING LOOP                                                       │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │  while (running) {                                              │   │
+│   │      raw_value = read("/sys/class/hwmon/hwmonN/temp1_input");   │   │
+│   │      scaled_value = raw_value / 1000.0 * scaleFactor;           │   │
+│   │      if (value_changed) {                                       │   │
+│   │          update_dbus_property("Value", scaled_value);           │   │
+│   │          check_thresholds(scaled_value);                        │   │
+│   │      }                                                          │   │
+│   │      sleep(pollInterval);  // typically 1 second                │   │
+│   │  }                                                              │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                   │                                     │
+│                                   ▼                                     │
+│   4. D-BUS PUBLICATION                                                  │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │  Service: xyz.openbmc_project.HwmonTempSensor                   │   │
+│   │  Path: /xyz/openbmc_project/sensors/temperature/CPU_Temp        │   │
+│   │  Interface: xyz.openbmc_project.Sensor.Value                    │   │
+│   │      Property: Value = 45.5 (double)                            │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Source reference**: [HwmonTempSensor.cpp](https://github.com/openbmc/dbus-sensors/blob/master/src/HwmonTempSensor.cpp)
+
+### Threshold Detection Algorithm
+
+Thresholds use hysteresis to prevent rapid alarm toggling:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                    Threshold Hysteresis                                │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│   Temperature (°C)                                                     │
+│        │                                                               │
+│    95 ─┼─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ Upper Critical                       │
+│        │                                                               │
+│    90 ─┼─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ Upper Critical Hysteresis (95-5)     │
+│        │                                                               │
+│    85 ─┼─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ Upper Warning                        │
+│        │              ╭───╮                                            │
+│    80 ─┼─ ─ ─ ─ ─ ─ ─╱─ ─ ╲─ ─ ─ ─ Upper Warning Hysteresis (85-5)     │
+│        │            ╱       ╲       (clear alarm below this)           │
+│    75 ─┼───────────╱         ╲──────                                   │
+│        │          ╱           ╲                                        │
+│    70 ─┼─────────╱             ╲                                       │
+│        │                                                               │
+│        └────────────────────────────────────────────────────▶ Time     │
+│                                                                        │
+│   Alarm Logic:                                                         │
+│   ├── SET alarm when: value >= threshold                               │
+│   ├── CLEAR alarm when: value < (threshold - hysteresis)               │
+│   └── Default hysteresis: 1.0 (configurable per threshold)             │
+│                                                                        │
+│   Code pattern (Thresholds.cpp):                                       │
+│   if (!alarm && value >= threshold) {                                  │
+│       alarm = true;                                                    │
+│       log_event("threshold crossed");                                  │
+│   } else if (alarm && value < (threshold - hysteresis)) {              │
+│       alarm = false;                                                   │
+│       log_event("threshold cleared");                                  │
+│   }                                                                    │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**Source reference**: [Thresholds.cpp](https://github.com/openbmc/dbus-sensors/blob/master/src/Thresholds.cpp)
+
+### Entity Manager Integration Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Sensor Discovery Flow                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   1. Entity Manager loads JSON configuration                            │
+│      ┌─────────────────────────────────────────────────────────────┐    │
+│      │ { "Name": "CPU_Temp", "Type": "TMP75", "Bus": 1, ... }      │    │
+│      └─────────────────────────────────────────────────────────────┘    │
+│                                   │                                     │
+│                                   ▼                                     │
+│   2. Entity Manager creates D-Bus Configuration object                  │
+│      Path: /xyz/openbmc_project/inventory/.../CPU_Temp                  │
+│      Interface: xyz.openbmc_project.Configuration.TMP75                 │
+│                                   │                                     │
+│                                   ▼                                     │
+│   3. HwmonTempSensor receives InterfacesAdded signal                    │
+│      ┌─────────────────────────────────────────────────────────────┐    │
+│      │ match = "type='signal',interface='ObjectManager',"          │    │
+│      │         "member='InterfacesAdded'"                          │    │
+│      └─────────────────────────────────────────────────────────────┘    │
+│                                   │                                     │
+│                                   ▼                                     │
+│   4. Daemon checks if Type matches its supported types                  │
+│      ┌──────────────────────────────────────────────────────────────┐   │
+│      │ supportedTypes = {"TMP75", "TMP112", "LM75", "EMC1403", ...} │   │
+│      │ if (config.Type in supportedTypes) { createSensor(); }       │   │
+│      └──────────────────────────────────────────────────────────────┘   │
+│                                   │                                     │
+│                                   ▼                                     │
+│   5. Daemon locates hwmon sysfs path                                    │
+│      ┌─────────────────────────────────────────────────────────────┐    │
+│      │ Scan /sys/class/hwmon/hwmon*/device/                        │    │
+│      │ Match i2c-{bus}-00{address} to configuration                │    │
+│      │ e.g., i2c-1-0048 for Bus=1, Address=0x48                    │    │
+│      └─────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### ADC Scaling and Voltage Dividers
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    ADC Voltage Calculation                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Hardware Voltage Divider:                                             │
+│                                                                         │
+│       Vin ──────┬──────                                                 │
+│                 │                                                       │
+│                ┌┴┐ R1                                                   │
+│                │ │ (e.g., 10kΩ)                                         │
+│                └┬┘                                                      │
+│                 ├──────────▶ ADC Input                                  │
+│                ┌┴┐ R2                                                   │
+│                │ │ (e.g., 3.3kΩ)                                        │
+│                └┬┘                                                      │
+│                 │                                                       │
+│       GND ──────┴──────                                                 │
+│                                                                         │
+│   Voltage Divider Formula:                                              │
+│   V_adc = V_in × R2 / (R1 + R2)                                         │
+│   V_in = V_adc × (R1 + R2) / R2                                         │
+│                                                                         │
+│   ScaleFactor Calculation:                                              │
+│   ScaleFactor = (R1 + R2) / R2                                          │
+│   Example: (10k + 3.3k) / 3.3k = 4.03                                   │
+│                                                                         │
+│   Entity Manager Configuration:                                         │
+│   {                                                                     │
+│       "Name": "P12V",                                                   │
+│       "Type": "ADC",                                                    │
+│       "Index": 0,                                                       │
+│       "ScaleFactor": 4.03,     ← Voltage divider ratio                  │
+│       "PowerState": "On"       ← Only read when host is on              │
+│   }                                                                     │
+│                                                                         │
+│   Raw to Final Conversion:                                              │
+│   raw_mv = read("/sys/bus/iio/devices/iio:device0/in_voltage0_raw");    │
+│   adc_voltage = raw_mv × reference_voltage / max_raw_value;             │
+│   actual_voltage = adc_voltage × ScaleFactor;                           │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Power State Filtering
+
+Sensors can be configured to only read when the host is in a specific power state:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Power State Filtering                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   PowerState Options:                                                   │
+│   ┌─────────────┬────────────────────────────────────────────────────┐  │
+│   │ Value       │ Sensor reads when...                               │  │
+│   ├─────────────┼────────────────────────────────────────────────────┤  │
+│   │ "Always"    │ Always (default, standby power sensors)            │  │
+│   │ "On"        │ Host is powered on (CPU/memory sensors)            │  │
+│   │ "BiosPost"  │ Host is in BIOS POST (initialization sensors)      │  │
+│   │ "Chassis"   │ Chassis power is on (12V rail sensors)             │  │
+│   └─────────────┴────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   Implementation:                                                       │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ // Subscribe to host state changes                              │   │
+│   │ match = "type='signal',path='/xyz/openbmc_project/state/host0'" │   │
+│   │                                                                 │   │
+│   │ // In polling loop                                              │   │
+│   │ if (powerState == "On" && hostState != Running) {               │   │
+│   │     value = NaN;  // Mark sensor unavailable                    │   │
+│   │     return;                                                     │   │
+│   │ }                                                               │   │
+│   │ value = read_sensor();                                          │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   When sensor is unavailable (host off), D-Bus Value = NaN              │
+│   This prevents false alarms and stale readings                         │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files in [dbus-sensors](https://github.com/openbmc/dbus-sensors):
+
+| File | Description |
+|------|-------------|
+| `src/HwmonTempSensor.cpp` | I2C temperature sensor implementation |
+| `src/ADCSensor.cpp` | ADC voltage sensor implementation |
+| `src/Thresholds.cpp` | Threshold detection and hysteresis |
+| `src/Utils.cpp` | Hwmon path discovery, scaling |
+| `src/SensorPaths.cpp` | D-Bus path construction |
+| `include/sensor.hpp` | Base sensor class interface |
+
+---
+
 ## References
 
 - [dbus-sensors](https://github.com/openbmc/dbus-sensors)

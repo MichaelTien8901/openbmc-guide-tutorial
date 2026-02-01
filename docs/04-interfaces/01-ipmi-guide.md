@@ -654,6 +654,243 @@ ipmitool user list 1
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for IPMI developers.
+
+### Command Handler Registration
+
+IPMI commands are handled by provider libraries that register handlers at startup:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Handler Registration Flow                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   1. ipmid loads provider libraries at startup                          │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ /usr/lib/ipmid-providers/                                       │   │
+│   │ ├── libchassishandler.so                                        │   │
+│   │ ├── libsensorhandler.so                                         │   │
+│   │ ├── libstoragehandler.so                                        │   │
+│   │ └── liboemhandler.so                                            │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                   │                                     │
+│                                   ▼                                     │
+│   2. Each library has constructor that calls ipmi::registerHandler()    │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ // In chassishandler.cpp                                        │   │
+│   │ IPMI_REGISTER_HANDLER(                                          │   │
+│   │     ipmi::prioOpenBmcBase,           // Priority                │   │
+│   │     ipmi::netFnChassis,              // NetFn = 0x00            │   │
+│   │     ipmi::chassis::cmdGetChassisStatus, // Cmd = 0x01           │   │
+│   │     ipmi::Privilege::User,           // Minimum privilege       │   │
+│   │     ipmiGetChassisStatus             // Handler function        │   │
+│   │ );                                                              │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                   │                                     │
+│                                   ▼                                     │
+│   3. Handler stored in dispatch table                                   │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ handlers[{netFn, cmd}] = {priority, privilege, handler}         │   │
+│   │                                                                 │   │
+│   │ Multiple handlers can register for same (netFn, cmd)            │   │
+│   │ Higher priority handler wins (OEM can override base)            │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Priority levels (higher wins):**
+
+| Priority | Value | Use Case |
+|----------|-------|----------|
+| `prioOpenBmcBase` | 10 | Default OpenBMC handlers |
+| `prioOemBase` | 20 | OEM-specific overrides |
+| `prioMax` | 40 | Highest priority handlers |
+
+**Source reference**: [ipmid/api.hpp](https://github.com/openbmc/phosphor-host-ipmid/blob/master/include/ipmid/api.hpp)
+
+### Message Flow Through KCS Interface
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    KCS Message Flow                                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Host CPU                              BMC                             │
+│   ┌────────────┐                        ┌────────────┐                  │
+│   │            │                        │            │                  │
+│   │  Host OS   │    KCS Registers       │   ipmid    │                  │
+│   │  (driver)  │    ┌──────────┐        │            │                  │
+│   │            │───▶│ Data_In  │───────▶│            │                  │
+│   │            │    │ Data_Out │◀───────│            │                  │
+│   │            │    │ Command  │        │            │                  │
+│   │            │◀───│ Status   │───────▶│            │                  │
+│   └────────────┘    └──────────┘        └────────────┘                  │
+│                                                                         │
+│   Message Structure (IPMI Request):                                     │
+│   ┌────────┬────────┬────────┬─────────────────────┐                    │
+│   │ NetFn  │  Cmd   │  Data  │        ...          │                    │
+│   │ (6-bit)│ (8-bit)│ (0-N)  │                     │                    │
+│   └────────┴────────┴────────┴─────────────────────┘                    │
+│                                                                         │
+│   KCS State Machine:                                                    │
+│   ┌──────┐    Write_Start    ┌──────┐                                   │
+│   │ IDLE │──────────────────▶│ WRITE│                                   │
+│   └──────┘                   └───┬──┘                                   │
+│       ▲                          │                                      │
+│       │                          │ Write_End                            │
+│       │ Response_Complete        ▼                                      │
+│   ┌───┴──┐                   ┌──────┐                                   │
+│   │ READ │◀──────────────────│ EXEC │                                   │
+│   └──────┘    Read_Start     └──────┘                                   │
+│                                                                         │
+│   Device: /dev/ipmi-kcs1 (or /dev/kcs1)                                 │
+│   Driver: kcs_bmc (kernel module)                                       │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### RMCP+ Session Authentication
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    RMCP+ Session Establishment                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Client                                    BMC (netipmid)              │
+│      │                                          │                       │
+│      │  1. Get Channel Auth Capabilities        │                       │
+│      │─────────────────────────────────────────▶│                       │
+│      │◀─────────────────────────────────────────│ (RMCP+ supported)     │
+│      │                                          │                       │
+│      │  2. Open Session Request                 │                       │
+│      │   (auth algorithm, integrity, cipher)    │                       │
+│      │─────────────────────────────────────────▶│                       │
+│      │◀─────────────────────────────────────────│ (session ID, algos)   │
+│      │                                          │                       │
+│      │  3. RAKP Message 1 (client random)       │                       │
+│      │─────────────────────────────────────────▶│                       │
+│      │◀─────────────────────────────────────────│ RAKP 2 (BMC random,   │
+│      │                                          │  session auth)        │
+│      │  4. RAKP Message 3 (client auth)         │                       │
+│      │─────────────────────────────────────────▶│                       │
+│      │◀─────────────────────────────────────────│ RAKP 4 (success)      │
+│      │                                          │                       │
+│      │  5. Authenticated IPMI Commands          │                       │
+│      │   (encrypted with session keys)          │                       │
+│      │─────────────────────────────────────────▶│                       │
+│      │                                          │                       │
+│                                                                         │
+│   Cipher Suite 17 (commonly used):                                      │
+│   ├── Authentication: RAKP-HMAC-SHA256                                  │
+│   ├── Integrity: HMAC-SHA256-128                                        │
+│   └── Confidentiality: AES-CBC-128                                      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### SDR (Sensor Data Record) Structure
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                    SDR Record Types                                    │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│   SDR Type 0x01 - Full Sensor Record (43+ bytes):                      │
+│   ┌───────────────────────────────────────────────────────────────┐    │
+│   │ Offset │ Field                    │ Size │ Description        │    │
+│   ├────────┼──────────────────────────┼──────┼────────────────────┤    │
+│   │ 0-1    │ Record ID                │ 2    │ Unique identifier  │    │
+│   │ 2      │ SDR Version              │ 1    │ 0x51 = IPMI 1.5    │    │
+│   │ 3      │ Record Type              │ 1    │ 0x01 = Full        │    │
+│   │ 4      │ Record Length            │ 1    │ Bytes following    │    │
+│   │ 5      │ Sensor Owner ID          │ 1    │ I2C address/LUN    │    │
+│   │ 6      │ Sensor Owner LUN         │ 1    │ Channel/LUN        │    │
+│   │ 7      │ Sensor Number            │ 1    │ 0-255              │    │
+│   │ 8      │ Entity ID                │ 1    │ CPU, memory, etc.  │    │
+│   │ 9      │ Entity Instance          │ 1    │ Which instance     │    │
+│   │ 10     │ Sensor Initialization    │ 1    │ Flags              │    │
+│   │ 11     │ Sensor Capabilities      │ 1    │ Threshold support  │    │
+│   │ 12     │ Sensor Type              │ 1    │ Temperature, etc.  │    │
+│   │ 13     │ Event/Reading Type       │ 1    │ Threshold/discrete │    │
+│   │ 14-15  │ Assertion Event Mask     │ 2    │ Events to assert   │    │
+│   │ 16-17  │ Deassertion Event Mask   │ 2    │ Events to deassert │    │
+│   │ 18-19  │ Discrete Reading Mask    │ 2    │ Readable states    │    │
+│   │ 20     │ Sensor Units 1           │ 1    │ Unit modifiers     │    │
+│   │ 21     │ Sensor Units 2 (Base)    │ 1    │ Degrees C, Volts   │    │
+│   │ 22     │ Sensor Units 3 (Mod)     │ 1    │ Modifier unit      │    │
+│   │ 23     │ Linearization            │ 1    │ Linear, log, etc.  │    │
+│   │ 24-25  │ M, M Tolerance           │ 2    │ Scaling: M         │    │
+│   │ 26-27  │ B, B Accuracy            │ 2    │ Scaling: B         │    │
+│   │ 28     │ Accuracy/Direction       │ 1    │ Acc exp, direction │    │
+│   │ 29     │ R exp, B exp             │ 1    │ Exponents          │    │
+│   │ ...    │ Thresholds, ID string    │ ...  │                    │    │
+│   └───────────────────────────────────────────────────────────────┘    │
+│                                                                        │
+│   Reading Conversion:                                                  │
+│   y = (M × raw + B × 10^Bexp) × 10^Rexp                                │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### OEM Command Registration Pattern
+
+```cpp
+// Example: Custom OEM command handler
+#include <ipmid/api.hpp>
+
+// Define OEM NetFn (0x30-0x3F are OEM)
+constexpr ipmi::NetFn oemNetFn = 0x30;
+constexpr ipmi::Cmd oemGetInfo = 0x01;
+
+// Handler function
+ipmi::RspType<uint8_t, // version
+              std::string> // description
+    oemGetInfoHandler(ipmi::Context::ptr ctx)
+{
+    // Access D-Bus if needed
+    auto bus = getSdBus();
+
+    // Return success with data
+    return ipmi::responseSuccess(
+        uint8_t{0x01},           // version
+        std::string{"My OEM"}    // description
+    );
+}
+
+// Register at library load
+void registerOemHandlers() __attribute__((constructor));
+void registerOemHandlers()
+{
+    ipmi::registerHandler(
+        ipmi::prioOemBase,
+        oemNetFn,
+        oemGetInfo,
+        ipmi::Privilege::User,
+        oemGetInfoHandler
+    );
+}
+```
+
+### Source Code Reference
+
+Key implementation files in [phosphor-host-ipmid](https://github.com/openbmc/phosphor-host-ipmid):
+
+| File | Description |
+|------|-------------|
+| `ipmid.cpp` | Main daemon, message dispatch |
+| `chassishandler.cpp` | Chassis commands (power, identify) |
+| `sensorhandler.cpp` | Sensor reading, thresholds, SDR |
+| `storagehandler.cpp` | FRU, SEL, SDR repository |
+| `apphandler.cpp` | Application commands (device ID) |
+| `include/ipmid/api.hpp` | Handler registration API |
+| `include/ipmid/types.hpp` | Type definitions |
+
+---
+
 ## References
 
 - [phosphor-host-ipmid](https://github.com/openbmc/phosphor-host-ipmid) - D-Bus based IPMI daemon

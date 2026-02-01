@@ -2026,5 +2026,200 @@ ipmitool -I lanplus -H <bmc-ip> -U root -P 0penBmc chassis status
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for firmware update developers.
+
+### Flash Layout and MTD Partitions
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Typical BMC Flash Layout (32MB)                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Offset     Size        Partition        Description                   │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ 0x0000000│ 512KB     │ u-boot        │ Bootloader               │   │
+│   ├──────────┼───────────┼───────────────┼──────────────────────────┤   │
+│   │ 0x0080000│ 128KB     │ u-boot-env    │ U-Boot environment       │   │
+│   ├──────────┼───────────┼───────────────┼──────────────────────────┤   │
+│   │ 0x00A0000│ 4.5MB     │ kernel        │ FIT image (kernel+dtb)   │   │
+│   ├──────────┼───────────┼───────────────┼──────────────────────────┤   │
+│   │ 0x0520000│ 25MB      │ rofs          │ Read-only rootfs         │   │
+│   ├──────────┼───────────┼───────────────┼──────────────────────────┤   │
+│   │ 0x1DC0000│ 2MB       │ rwfs          │ Persistent read-write    │   │
+│   └──────────┴───────────┴───────────────┴──────────────────────────┘   │
+│                                                                         │
+│   Dual-Flash Configuration (A/B):                                       │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ Flash 0 (Current)     │ Flash 1 (Alternate)                     │   │
+│   ├───────────────────────┼─────────────────────────────────────────┤   │
+│   │ u-boot (shared)       │ (reserved)                              │   │
+│   │ u-boot-env            │                                         │   │
+│   │ kernel-a (active)     │ kernel-b                                │   │
+│   │ rofs-a (active)       │ rofs-b                                  │   │
+│   │ rwfs (shared)         │                                         │   │
+│   └───────────────────────┴─────────────────────────────────────────┘   │
+│                                                                         │
+│   Linux MTD Devices:                                                    │
+│   /dev/mtd0 = u-boot                                                    │
+│   /dev/mtd1 = u-boot-env                                                │
+│   /dev/mtd2 = kernel                                                    │
+│   /dev/mtd3 = rofs                                                      │
+│   /dev/mtd4 = rwfs                                                      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Update Image Verification
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Image Verification Process                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Update Image Structure:                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ MANIFEST (text)        │ Version info, purpose, sha256 hashes   │   │
+│   ├─────────────────────────────────────────────────────────────────┤   │
+│   │ publickey (optional)   │ Public key for signature verification  │   │
+│   ├─────────────────────────────────────────────────────────────────┤   │
+│   │ image-kernel           │ FIT image with kernel and DTB          │   │
+│   ├─────────────────────────────────────────────────────────────────┤   │
+│   │ image-rofs             │ Read-only root filesystem (squashfs)   │   │
+│   ├─────────────────────────────────────────────────────────────────┤   │
+│   │ image-u-boot           │ U-Boot binary (optional)               │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   MANIFEST File Example:                                                │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ purpose=xyz.openbmc_project.Software.Version.VersionPurpose.BMC │   │
+│   │ version=2.12.0                                                  │   │
+│   │ MachineName=romulus                                             │   │
+│   │ KeyType=OpenBMC                                                 │   │
+│   │ HashType=RSA-SHA256                                             │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Verification Flow:                                                    │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐          │
+│   │ Receive  │───▶│ Verify   │───▶│ Verify   │───▶│ Verify   │          │
+│   │ Image    │    │ MANIFEST │    │ Signature│    │ Hashes   │          │
+│   └──────────┘    └──────────┘    └──────────┘    └──────────┘          │
+│                        │              │               │                 │
+│                        ▼              ▼               ▼                 │
+│                   Check          RSA verify      SHA256 each            │
+│                   required       against        component vs            │
+│                   fields         pubkey         MANIFEST                │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Flash Programming Internals
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Flash Write Process                                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   MTD Write Operation:                                                  │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ 1. Erase sector (typically 64KB)                                │   │
+│   │    ioctl(mtd_fd, MEMERASE, &erase_info)                         │   │
+│   │    └─ Sector erased to 0xFF                                     │   │
+│   │                                                                 │   │
+│   │ 2. Write data (page-aligned, typically 256 bytes)               │   │
+│   │    write(mtd_fd, data, page_size)                               │   │
+│   │    └─ Data written to erased sector                             │   │
+│   │                                                                 │   │
+│   │ 3. Verify (optional, MEMVERIFY ioctl)                           │   │
+│   │    read-back and compare                                        │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Update Daemon (phosphor-bmc-code-mgmt) Flow:                          │
+│   ┌────────────────────────────────────────────────────────────────┐    │
+│   │ 1. Image uploaded to /tmp/images/                              │    │
+│   │ 2. Item Updater detects new image via inotify                  │    │
+│   │ 3. Verify signature and hashes                                 │    │
+│   │ 4. Create D-Bus Version object (Ready)                         │    │
+│   │ 5. User activates: RequestedActivation = Active                │    │
+│   │ 6. Write image components to alternate flash                   │    │
+│   │ 7. Update U-Boot env to boot from new image                    │    │
+│   │ 8. Set Activation = Activating, then Active                    │    │
+│   │ 9. Reboot (if requested)                                       │    │
+│   └────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│   U-Boot Environment (dual-boot):                                       │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ bootside=a           # Currently running: a or b                │   │
+│   │ bootcount=0          # Failed boot attempts                     │   │
+│   │ bootlimit=3          # Max failures before fallback             │   │
+│   │ bootcmd=             # Selects kernel-a or kernel-b             │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Recovery Mechanism
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Boot Failure Recovery                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Recovery Flow:                                                        │
+│   ┌──────────────────────────────────────────────────────────────────┐  │
+│   │                                                                  │  │
+│   │  U-Boot Power On                                                 │  │
+│   │       │                                                          │  │
+│   │       ▼                                                          │  │
+│   │  bootcount++                                                     │  │
+│   │       │                                                          │  │
+│   │       ▼                                                          │  │
+│   │  bootcount > bootlimit? ───Yes──▶ Switch to alternate image      │  │
+│   │       │                           Reset bootcount                │  │
+│   │       No                          Boot alternate                 │  │
+│   │       │                                                          │  │
+│   │       ▼                                                          │  │
+│   │  Boot current image                                              │  │
+│   │       │                                                          │  │
+│   │       ▼                                                          │  │
+│   │  Linux boots successfully?                                       │  │
+│   │       │                                                          │  │
+│   │      Yes                                                         │  │
+│   │       │                                                          │  │
+│   │       ▼                                                          │  │
+│   │  systemd reaches multi-user.target                               │  │
+│   │       │                                                          │  │
+│   │       ▼                                                          │  │
+│   │  obmc-flash-bmc-setenv@bootcount=0.service                       │  │
+│   │  (Reset bootcount to indicate successful boot)                   │  │
+│   │                                                                  │  │
+│   └──────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   Manual Recovery Commands:                                             │
+│   # From U-Boot prompt (serial console):                                │
+│   => setenv bootside b        # Switch to alternate                     │
+│   => saveenv                                                            │
+│   => reset                                                              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files:
+
+| Repository | File/Directory | Description |
+|------------|----------------|-------------|
+| phosphor-bmc-code-mgmt | `item_updater.cpp` | Main update logic |
+| phosphor-bmc-code-mgmt | `activation.cpp` | Activation state machine |
+| phosphor-bmc-code-mgmt | `image_verify.cpp` | Signature verification |
+| phosphor-bmc-code-mgmt | `flash.cpp` | Flash write operations |
+| openbmc/meta-phosphor | `recipes-phosphor/flash/` | Flash recipes |
+| u-boot | `board/aspeed/` | ASPEED board support |
+
+---
+
 {: .note }
 **Tested on**: OpenBMC master, QEMU romulus (limited dual-flash functionality), ASPEED AST2500/AST2600 EVB

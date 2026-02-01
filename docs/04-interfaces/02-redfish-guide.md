@@ -28,37 +28,37 @@ Configure and extend the Redfish API in OpenBMC.
 **Redfish** is a modern, RESTful API standard for server management, replacing IPMI for most use cases. OpenBMC implements Redfish through **bmcweb**, including support for **Redfish Aggregation** to manage multiple BMCs from a single endpoint.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────┐
 │                      Redfish Architecture                        │
-├─────────────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  ┌─────────────────────────────────────────────────────────────┐│
+│  ┌──────────────────────────────────────────────────────────────┐│
 │  │                    External Clients                          ││
 │  │            (curl, Redfish clients, WebUI)                    ││
-│  └──────────────────────────┬──────────────────────────────────┘│
+│  └──────────────────────────┬───────────────────────────────────┘│
 │                             │                                    │
 │                         HTTPS/443                                │
 │                             │                                    │
-│  ┌──────────────────────────┴──────────────────────────────────┐│
+│  ┌──────────────────────────┴───────────────────────────────────┐│
 │  │                        bmcweb                                ││
 │  │                                                              ││
-│  │   ┌─────────────────────────────────────────────────────┐   ││
+│  │   ┌──────────────────────────────────────────────────────┐   ││
 │  │   │              Resource Handlers                       │   ││
 │  │   │                                                      │   ││
 │  │   │ Systems │ Chassis │ Managers │ Account │ Event │ OEM │   ││
-│  │   └─────────────────────────────────────────────────────┘   ││
+│  │   └──────────────────────────────────────────────────────┘   ││
 │  │                                                              ││
-│  │   ┌─────────────────────────────────────────────────────┐   ││
+│  │   ┌──────────────────────────────────────────────────────┐   ││
 │  │   │              Authentication                          │   ││
-│  │   │         (Basic, Session, mTLS)                      │   ││
-│  │   └─────────────────────────────────────────────────────┘   ││
-│  └──────────────────────────┬──────────────────────────────────┘│
+│  │   │         (Basic, Session, mTLS)                       │   ││
+│  │   └──────────────────────────────────────────────────────┘   ││
+│  └──────────────────────────┬───────────────────────────────────┘│
 │                             │                                    │
-│  ┌──────────────────────────┴──────────────────────────────────┐│
+│  ┌──────────────────────────┴───────────────────────────────────┐│
 │  │                         D-Bus                                ││
-│  │           (phosphor-* services, inventory, sensors)         ││
-│  └─────────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────────┘
+│  │           (phosphor-* services, inventory, sensors)          ││
+│  └──────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -1007,6 +1007,212 @@ busctl call xyz.openbmc_project.ObjectMapper \
     xyz.openbmc_project.ObjectMapper \
     GetObject sas "/xyz/openbmc_project/inventory/system" 0
 ```
+
+---
+
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for Redfish developers.
+
+### Request Routing Architecture
+
+bmcweb uses a route registration pattern for handling HTTP requests:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    bmcweb Request Routing                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   HTTP Request: GET /redfish/v1/Chassis/chassis0/Thermal                │
+│                                   │                                     │
+│                                   ▼                                     │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    Crow HTTP Server                             │   │
+│   │   (Boost.Beast HTTP, Boost.Asio I/O)                            │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    Route Matching                               │   │
+│   │   Routes registered at startup via BMCWEB_ROUTE macro           │   │
+│   │                                                                 │   │
+│   │   Pattern: "/redfish/v1/Chassis/<str>/Thermal"                  │   │
+│   │   Matches: chassis0 → extracted as parameter                    │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    Authentication Check                         │   │
+│   │   ├── Session token validation                                  │   │
+│   │   ├── Basic auth (if enabled)                                   │   │
+│   │   └── mTLS certificate (if enabled)                             │   │
+│   └────────────────────────────┬────────────────────────────────────┘   │
+│                                │                                        │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    Handler Function                             │   │
+│   │   thermal.cpp::handleThermalGet()                               │   │
+│   │   ├── Query D-Bus for sensor data                               │   │
+│   │   ├── Build JSON response                                       │   │
+│   │   └── Send response via asyncResp                               │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Route registration pattern:**
+
+```cpp
+// In redfish-core/lib/thermal.hpp
+inline void requestRoutesThermal(App& app)
+{
+    BMCWEB_ROUTE(app, "/redfish/v1/Chassis/<str>/Thermal/")
+        .privileges(redfish::privileges::getThermal)
+        .methods(boost::beast::http::verb::get)(
+            std::bind_front(handleThermalGet, std::ref(app)));
+}
+```
+
+**Source reference**: [redfish-core/lib/](https://github.com/openbmc/bmcweb/tree/master/redfish-core/lib)
+
+### Async D-Bus Query Pattern
+
+bmcweb uses async callbacks to avoid blocking the event loop:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Async D-Bus Query Pattern                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Handler receives asyncResp (shared_ptr to response object)            │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ void handleChassisGet(                                          │   │
+│   │     App& app,                                                   │   │
+│   │     const crow::Request& req,                                   │   │
+│   │     const std::shared_ptr<bmcweb::AsyncResp>& asyncResp,        │   │
+│   │     const std::string& chassisId)                               │   │
+│   │ {                                                               │   │
+│   │     // asyncResp->res.jsonValue populated over multiple calls   │   │
+│   │     // Response sent when asyncResp refcount reaches zero       │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Multiple async queries in flight:                                     │
+│   ┌────────────────────────────────────────────────────────────────┐    │
+│   │ asyncResp │───▶ Query 1: Get Chassis info ──────┐              │    │
+│   │           │───▶ Query 2: Get Power state ───────┤ All complete │    │
+│   │           │───▶ Query 3: Get Thermal data ──────┤     │        │    │
+│   │           │───▶ Query 4: Get LED state ─────────┘     ▼        │    │
+│   │           │                              Response sent         │    │
+│   └────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│   Pattern for D-Bus async call:                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ crow::connections::systemBus->async_method_call(                │   │
+│   │     [asyncResp](const boost::system::error_code& ec,            │   │
+│   │                 const PropertiesType& props) {                  │   │
+│   │         if (ec) {                                               │   │
+│   │             messages::internalError(asyncResp->res);            │   │
+│   │             return;                                             │   │
+│   │         }                                                       │   │
+│   │         // Populate asyncResp->res.jsonValue                    │   │
+│   │     },                                                          │   │
+│   │     service, objectPath, "org.freedesktop.DBus.Properties",     │   │
+│   │     "GetAll", interface);                                       │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Event Service (SSE) Implementation
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Redfish Event Service                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Event Flow:                                                           │
+│   ┌────────────────┐     ┌────────────────┐     ┌────────────────┐      │
+│   │ D-Bus Signal   │────▶│ Event Filter   │────▶│ SSE Stream /   │      │
+│   │ (phosphor-*)   │     │ (subscription  │     │ Push Webhook   │      │
+│   │                │     │  match rules)  │     │                │      │
+│   └────────────────┘     └────────────────┘     └────────────────┘      │
+│                                                                         │
+│   Subscription Types:                                                   │
+│   ├── SSE (Server-Sent Events) - persistent HTTP connection             │
+│   │   GET /redfish/v1/EventService/SSE                                  │
+│   │   Response: text/event-stream                                       │
+│   │                                                                     │
+│   └── Push Style (Webhook) - HTTP POST to destination                   │
+│       POST to subscriber's Destination URL                              │
+│                                                                         │
+│   Event Types:                                                          │
+│   ├── Alert - hardware alerts (thresholds, failures)                    │
+│   ├── ResourceAdded - new resource created                              │
+│   ├── ResourceRemoved - resource deleted                                │
+│   ├── ResourceUpdated - resource property changed                       │
+│   └── MetricReport - telemetry data                                     │
+│                                                                         │
+│   D-Bus Signal to Redfish Event Mapping:                                │
+│   ┌──────────────────────────────────────────────────────────────────┐  │
+│   │ D-Bus: PropertiesChanged on Sensor.Value                         │  │
+│   │   └─▶ Redfish: Alert with MessageId "Threshold exceeded"         │  │
+│   │                                                                  │  │
+│   │ D-Bus: InterfacesAdded on Inventory path                         │  │
+│   │   └─▶ Redfish: ResourceAdded for new inventory item              │  │
+│   └──────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### OEM Extension Pattern
+
+```cpp
+// Example: Adding OEM data to an existing resource
+// In redfish-core/lib/chassis.cpp
+
+inline void handleChassisGet(...)
+{
+    // Standard Redfish properties
+    asyncResp->res.jsonValue["@odata.type"] = "#Chassis.v1_16_0.Chassis";
+    asyncResp->res.jsonValue["Id"] = chassisId;
+
+    // Add OEM section
+    nlohmann::json& oem = asyncResp->res.jsonValue["Oem"]["OpenBMC"];
+    oem["@odata.type"] = "#OpenBMCChassis.v1_0_0.Chassis";
+
+    // Query OEM-specific D-Bus properties
+    crow::connections::systemBus->async_method_call(
+        [asyncResp](const boost::system::error_code& ec,
+                    const std::string& customProp) {
+            if (!ec) {
+                asyncResp->res.jsonValue["Oem"]["OpenBMC"]
+                    ["CustomProperty"] = customProp;
+            }
+        },
+        "xyz.openbmc_project.OEM.Service",
+        objectPath,
+        "org.freedesktop.DBus.Properties",
+        "Get",
+        "xyz.openbmc_project.OEM.CustomInterface",
+        "CustomProperty");
+}
+```
+
+### Source Code Reference
+
+Key implementation files in [bmcweb](https://github.com/openbmc/bmcweb):
+
+| File | Description |
+|------|-------------|
+| `src/webserver_main.cpp` | Server startup, route registration |
+| `include/sessions.hpp` | Session management |
+| `redfish-core/lib/systems.cpp` | /Systems resource |
+| `redfish-core/lib/chassis.cpp` | /Chassis resource |
+| `redfish-core/lib/sensors.cpp` | Sensor reading helpers |
+| `redfish-core/lib/log_services.cpp` | SEL/Event log |
+| `redfish-core/include/privileges.hpp` | Authorization |
+| `redfish-core/include/utils/dbus_utils.hpp` | D-Bus helpers |
 
 ---
 

@@ -704,6 +704,206 @@ i2cget -y 3 0x58 0x79 w  # STATUS_WORD
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for power management developers.
+
+### PMBus Protocol Overview
+
+PMBus is an I2C-based protocol for power supply communication:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    PMBus Communication                                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   BMC                                    PSU (PMBus Device)             │
+│    │                                           │                        │
+│    │  I2C Write: [Addr] [Cmd] [Data...]        │                        │
+│    │──────────────────────────────────────────▶│                        │
+│    │                                           │                        │
+│    │  I2C Read: [Addr] [Cmd]                   │                        │
+│    │──────────────────────────────────────────▶│                        │
+│    │◀──────────────────────────────────────────│ [Data...]              │
+│    │                                           │                        │
+│                                                                         │
+│   Common PMBus Commands:                                                │
+│   ┌──────────┬────────┬─────────────────────────────────────────────┐   │
+│   │ Command  │  Code  │ Description                                 │   │
+│   ├──────────┼────────┼─────────────────────────────────────────────┤   │
+│   │ PAGE     │  0x00  │ Select output page                          │   │
+│   │ OPERATION│  0x01  │ Turn output on/off, margin                  │   │
+│   │ ON_OFF   │  0x02  │ Soft on/off control                         │   │
+│   │ CLEAR_FAULT│ 0x03 │ Clear all faults                            │   │
+│   │ VOUT_MODE│  0x20  │ Voltage output mode/exponent                │   │
+│   │ VOUT_CMD │  0x21  │ Commanded output voltage                    │   │
+│   │ READ_VIN │  0x88  │ Input voltage                               │   │
+│   │ READ_IIN │  0x89  │ Input current                               │   │
+│   │ READ_VOUT│  0x8B  │ Output voltage                              │   │
+│   │ READ_IOUT│  0x8C  │ Output current                              │   │
+│   │ READ_TEMP│  0x8D  │ Temperature (various)                       │   │
+│   │ READ_POUT│  0x96  │ Output power                                │   │
+│   │ READ_PIN │  0x97  │ Input power                                 │   │
+│   │ STATUS_WD│  0x79  │ Status word (all faults summary)            │   │
+│   │ MFR_ID   │  0x99  │ Manufacturer ID                             │   │
+│   │ MFR_MODEL│  0x9A  │ Manufacturer model                          │   │
+│   └──────────┴────────┴─────────────────────────────────────────────┘   │
+│                                                                         │
+│   Linear11 Format (used for most readings):                             │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ 16-bit value: [YYYYYYYYYY XXXXX]                                │   │
+│   │ Y = 11-bit mantissa (two's complement)                          │   │
+│   │ X = 5-bit exponent (two's complement)                           │   │
+│   │ Real value = Y × 2^X                                            │   │
+│   │                                                                 │   │
+│   │ Example: 0x0B20 = 0000101 10010 0000                            │   │
+│   │   Y = 0x164 = 356, X = 0x00 = 0                                 │   │
+│   │   Value = 356 × 2^0 = 356 (e.g., 35.6 Amps with scaling)        │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Source reference**: [phosphor-power/tools/power-utils](https://github.com/openbmc/phosphor-power)
+
+### Power Sequencing
+
+Power sequencing ensures voltages come up in the correct order:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Power Sequencing Timeline                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Time ──────────────────────────────────────────────────────────────▶  │
+│                                                                         │
+│   STDBY_3V3 ─────────────────────────────────────────────────────────   │
+│   (always on)                                                           │
+│                                                                         │
+│   ATX_PS_ON ───────────────────┐                                        │
+│                                └─────────────────────────────────────   │
+│                                │                                        │
+│   P12V_MAIN ───────────────────┼──┐                                     │
+│                                   └──────────────────────────────────   │
+│                                   │                                     │
+│   P3V3_MAIN ──────────────────────┼──┐                                  │
+│                                      └───────────────────────────────   │
+│                                      │                                  │
+│   P1V8      ─────────────────────────┼──┐                               │
+│                                         └────────────────────────────   │
+│                                         │                               │
+│   VCORE     ────────────────────────────┼──┐                            │
+│   (VR output)                              └─────────────────────────   │
+│                                            │                            │
+│   POWER_GOOD ─────────────────────────────────┐                         │
+│                                               └──────────────────────   │
+│                                                                         │
+│   Timing Constraints:                                                   │
+│   ├── t1: PS_ON to 12V stable: < 500ms                                  │
+│   ├── t2: 12V to 3.3V stable: 1-10ms                                    │
+│   ├── t3: 3.3V to VR enable: 5-20ms                                     │
+│   ├── t4: VR stable to POWER_GOOD: 10-100ms                             │
+│   └── Total sequence time: typically 100-500ms                          │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Voltage Regulator (VR) Configuration
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Voltage Regulator Control                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   phosphor-regulators JSON Configuration:                               │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ {                                                               │   │
+│   │   "chassis": [{                                                 │   │
+│   │     "number": 1,                                                │   │
+│   │     "devices": [{                                               │   │
+│   │       "id": "vdd_cpu0",                                         │   │
+│   │       "is_regulator": true,                                     │   │
+│   │       "fru": "/system/chassis/motherboard/cpu0",                │   │
+│   │       "i2c_interface": {                                        │   │
+│   │         "bus": 5,                                               │   │
+│   │         "address": "0x40"                                       │   │
+│   │       },                                                        │   │
+│   │       "configuration": {                                        │   │
+│   │         "volts": 1.0,                                           │   │
+│   │         "rule_id": "set_voltage_rule"                           │   │
+│   │       },                                                        │   │
+│   │       "rails": [{                                               │   │
+│   │         "id": "vdd_cpu0_rail",                                  │   │
+│   │         "sensor_monitoring": {                                  │   │
+│   │           "rule_id": "read_sensors_rule"                        │   │
+│   │         }                                                       │   │
+│   │       }]                                                        │   │
+│   │     }]                                                          │   │
+│   │   }]                                                            │   │
+│   │ }                                                               │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   VR Sensor Mapping:                                                    │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ D-Bus Path: /xyz/openbmc_project/sensors/voltage/VDD_CPU0       │   │
+│   │ PMBus Cmd: READ_VOUT (0x8B)                                     │   │
+│   │ Conversion: Linear16 with VOUT_MODE exponent                    │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Power Capping Implementation
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Power Capping (DCMI)                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Power Cap Control Flow:                                               │
+│   ┌────────────────┐    ┌────────────────┐    ┌────────────────┐        │
+│   │  User sets     │───▶│  BMC enforces  │───▶│  Host CPU      │        │
+│   │  power cap     │    │  via DCMI/OOB  │    │  throttles     │        │
+│   │  (Redfish/IPMI)│    │                │    │                │        │
+│   └────────────────┘    └────────────────┘    └────────────────┘        │
+│                                                                         │
+│   D-Bus Interface:                                                      │
+│   Path: /xyz/openbmc_project/control/host0/power_cap                    │
+│   Interface: xyz.openbmc_project.Control.Power.Cap                      │
+│   ├── PowerCap (uint32) - Target power in watts                         │
+│   ├── PowerCapEnable (bool) - Cap enforcement enabled                   │
+│   └── ExceptionAction - Action on cap violation                         │
+│                                                                         │
+│   Implementation:                                                       │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ 1. Redfish PATCH to /redfish/v1/Chassis/chassis0/Power          │   │
+│   │    { "PowerControl": [{ "PowerLimit": {"LimitInWatts": 500}}] } │   │
+│   │                                                                 │   │
+│   │ 2. bmcweb writes to D-Bus PowerCap property                     │   │
+│   │                                                                 │   │
+│   │ 3. phosphor-host-ipmid sends DCMI Set Power Limit to host       │   │
+│   │                                                                 │   │
+│   │ 4. Host BIOS/ME enforces cap via CPU P-state throttling         │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Source Code Reference
+
+Key implementation files:
+
+| Repository | File/Directory | Description |
+|------------|----------------|-------------|
+| phosphor-power | `phosphor-power-supply/` | PSU monitoring daemon |
+| phosphor-power | `phosphor-regulators/` | Voltage regulator control |
+| phosphor-power | `power-sequencer/` | Power sequencing |
+| x86-power-control | `src/power_control.cpp` | GPIO power control |
+| phosphor-dbus-interfaces | `xyz/openbmc_project/Control/Power/` | Power interfaces |
+
+---
+
 ## References
 
 - [phosphor-power](https://github.com/openbmc/phosphor-power)

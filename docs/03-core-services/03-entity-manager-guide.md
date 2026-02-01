@@ -742,6 +742,264 @@ busctl get-property xyz.openbmc_project.FruDevice \
 
 ---
 
+## Deep Dive
+{: .text-delta }
+
+Advanced implementation details for Entity Manager developers.
+
+### Probe Evaluation Algorithm
+
+Entity Manager evaluates probes in a specific order to determine which configurations to load:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     Probe Evaluation Flow                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   1. STARTUP                                                            │
+│      ├── Load all JSON files from configuration directories             │
+│      ├── Parse each configuration into memory                           │
+│      └── Build dependency graph of probe conditions                     │
+│                                                                         │
+│   2. INITIAL PROBE EVALUATION                                           │
+│      ├── Evaluate "TRUE" probes first (always match)                    │
+│      ├── Query D-Bus for FruDevice objects                              │
+│      ├── Query I2C bus for device presence                              │
+│      ├── Query GPIO states                                              │
+│      └── Evaluate compound probes (AND/OR)                              │
+│                                                                         │
+│   3. MATCH HANDLING                                                     │
+│      ├── For each matching probe:                                       │
+│      │   ├── Extract record values ($bus, $address, $FIELD)             │
+│      │   ├── Substitute variables in Exposes section                    │
+│      │   └── Create D-Bus objects for entity and children               │
+│      └── Store matched configurations in active set                     │
+│                                                                         │
+│   4. CONTINUOUS MONITORING                                              │
+│      ├── Watch for D-Bus signals (new FRU devices, etc.)                │
+│      ├── Watch for file changes (inotify)                               │
+│      └── Re-evaluate affected probes on changes                         │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Probe Evaluation Priority:**
+
+| Priority | Probe Type | Evaluation Method |
+|----------|------------|-------------------|
+| 1 | `TRUE` / `FALSE` | Immediate (no D-Bus query) |
+| 2 | `i2c()` | I2C device presence check |
+| 3 | `gpio()` | GPIO line state query |
+| 4 | `xyz.openbmc_project.FruDevice()` | D-Bus property match |
+| 5 | `AND()` / `OR()` | Recursive evaluation |
+
+**Source reference**: [EntityManager.cpp](https://github.com/openbmc/entity-manager/blob/master/src/EntityManager.cpp)
+
+### Variable Substitution System
+
+Entity Manager supports variable substitution using the `$` prefix:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Variable Substitution                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Source Variables (from matched probe record):                         │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │  FruDevice match at /xyz/openbmc_project/FruDevice/device_0     │   │
+│   │  ├── PRODUCT_PRODUCT_NAME = "MyServer"                          │   │
+│   │  ├── PRODUCT_MANUFACTURER = "ACME"                              │   │
+│   │  ├── PRODUCT_SERIAL_NUMBER = "SN12345"                          │   │
+│   │  ├── bus = 1                                                    │   │
+│   │  └── address = 80                                               │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Configuration Template:                     After Substitution:       │
+│   ┌─────────────────────────────┐            ┌─────────────────────┐    │
+│   │ "Name": "$PRODUCT_PRODUCT   │     →      │ "Name": "MyServer"  │    │
+│   │         _NAME"              │            │                     │    │
+│   │ "Bus": "$bus"               │     →      │ "Bus": 1            │    │
+│   │ "Address": "$address"       │     →      │ "Address": 80       │    │
+│   └─────────────────────────────┘            └─────────────────────┘    │
+│                                                                         │
+│   Special Variables:                                                    │
+│   ├── $bus      - I2C bus number from probe match                       │
+│   ├── $address  - I2C device address from probe match                   │
+│   ├── $index    - Array index when multiple matches                     │
+│   └── $FIELD    - Any FRU field (PRODUCT_*, BOARD_*, CHASSIS_*)         │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Variable resolution order:**
+1. Probe record properties (bus, address)
+2. FRU field values (PRODUCT_*, BOARD_*)
+3. Parent entity properties (inheritance)
+4. Default values (if specified)
+
+### Configuration Loading Sequence
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Configuration Loading Sequence                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Time ──────────────────────────────────────────────────────────────▶  │
+│                                                                         │
+│   ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐       │
+│   │systemd  │  │FruDevice│  │ Entity  │  │ dbus-   │  │  PID    │       │
+│   │ start   │  │ scans   │  │ Manager │  │ sensors │  │ control │       │
+│   │         │  │ I2C bus │  │ probes  │  │ starts  │  │ starts  │       │
+│   └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘       │
+│        │            │            │            │            │            │
+│        ▼            ▼            ▼            ▼            ▼            │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                        D-Bus Timeline                           │   │
+│   ├─────────────────────────────────────────────────────────────────┤   │
+│   │ t=0s    xyz.openbmc_project.EntityManager claims name           │   │
+│   │ t=0.5s  xyz.openbmc_project.FruDevice claims name               │   │
+│   │ t=1s    FruDevice emits InterfacesAdded for each EEPROM         │   │
+│   │ t=1.5s  EntityManager receives signal, evaluates probes         │   │
+│   │ t=2s    EntityManager creates D-Bus objects for matches         │   │
+│   │ t=2.5s  dbus-sensors detects new Configuration objects          │   │
+│   │ t=3s    Sensors appear on D-Bus                                 │   │
+│   │ t=3.5s  phosphor-pid-control reads sensor configs               │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key dependencies:**
+- `xyz.openbmc_project.FruDevice` must start before FRU probes work
+- Entity Manager creates `xyz.openbmc_project.Configuration.*` objects
+- Sensor daemons watch for Configuration objects via ObjectMapper
+
+### D-Bus Object Creation
+
+When a probe matches, Entity Manager creates D-Bus objects:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    D-Bus Object Hierarchy                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Configuration JSON:                  D-Bus Objects Created:           │
+│                                                                         │
+│   {                                    /xyz/openbmc_project/            │
+│     "Name": "MyBoard",                 └── inventory/                   │
+│     "Type": "Board",                       └── system/                  │
+│     ...                        ───▶            └── board/               │
+│     "Exposes": [                                   └── MyBoard          │
+│       {                                                ├── Decorator... │
+│         "Name": "CPU_Temp",                            └── Item         │
+│         "Type": "TMP75"                                                 │
+│       }                                /xyz/openbmc_project/            │
+│     ]                                  └── inventory/                   │
+│   }                            ───▶        └── system/                  │
+│                                                └── board/               │
+│                                                    └── MyBoard/         │
+│                                                        └── CPU_Temp     │
+│                                                            └── TMP75    │
+│                                                                         │
+│   Object Path Construction:                                             │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ /xyz/openbmc_project/inventory/system/{Type}/{Name}/{Exposed}   │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Interface mapping:**
+
+| JSON Field | D-Bus Interface |
+|------------|-----------------|
+| `xyz.openbmc_project.Inventory.Item` | `xyz.openbmc_project.Inventory.Item` |
+| `xyz.openbmc_project.Inventory.Decorator.Asset` | `xyz.openbmc_project.Inventory.Decorator.Asset` |
+| `Type` in Exposes | `xyz.openbmc_project.Configuration.{Type}` |
+
+### Hot-Reload Mechanism
+
+Entity Manager uses inotify to detect configuration file changes:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Hot-Reload Implementation                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                     inotify Watches                             │   │
+│   │   /usr/share/entity-manager/configurations/  ← IN_MODIFY        │   │
+│   │   /etc/entity-manager/configurations/        ← IN_CREATE        │   │
+│   │                                              ← IN_DELETE        │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   File Change Detection:                                                │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐          │
+│   │ inotify  │───▶│ Parse    │───▶│ Compare  │───▶│ Update   │          │
+│   │ event    │    │ new JSON │    │ with old │    │ D-Bus    │          │
+│   └──────────┘    └──────────┘    └──────────┘    └──────────┘          │
+│                                                                         │
+│   Change Types:                                                         │
+│   ├── New file: Evaluate probe, create objects if match                 │
+│   ├── Modified: Re-evaluate probe, update or remove objects             │
+│   └── Deleted: Remove associated D-Bus objects                          │
+│                                                                         │
+│   Debouncing:                                                           │
+│   └── Multiple rapid changes are batched (100ms window)                 │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Note:** Hot-reload may not update all dependent services. Some sensor daemons require restart to pick up configuration changes.
+
+### Probe Expression Parser
+
+The probe expression parser supports a simple grammar:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Probe Expression Grammar                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   probe      := "TRUE" | "FALSE" | func_call | compound                 │
+│   compound   := "AND(" probe_list ")" | "OR(" probe_list ")"            │
+│   probe_list := probe ("," probe)*                                      │
+│   func_call  := func_name "(" params ")"                                │
+│   func_name  := "i2c" | "gpio" | dbus_interface                         │
+│   params     := json_object                                             │
+│                                                                         │
+│   Examples:                                                             │
+│   ├── TRUE                                                              │
+│   ├── i2c({'bus': 1, 'address': 72})                                    │
+│   ├── xyz.openbmc_project.FruDevice({'PRODUCT_NAME': 'Board'})          │
+│   ├── AND(i2c(...), gpio(...))                                          │
+│   └── OR(FruDevice(...), FruDevice(...))                                │
+│                                                                         │
+│   Property Matching:                                                    │
+│   ├── Exact match: {'FIELD': 'value'}                                   │
+│   ├── Prefix match: {'FIELD': 'prefix*'}  (not supported)               │
+│   └── Regex match: Not supported - use exact values                     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Source reference**: [PerformProbe.cpp](https://github.com/openbmc/entity-manager/blob/master/src/PerformProbe.cpp)
+
+### Source Code Reference
+
+Key implementation files in [entity-manager](https://github.com/openbmc/entity-manager):
+
+| File | Description |
+|------|-------------|
+| `src/EntityManager.cpp` | Main daemon, D-Bus object management |
+| `src/PerformProbe.cpp` | Probe evaluation logic |
+| `src/PerformScan.cpp` | I2C/GPIO scanning |
+| `src/FruDevice.cpp` | FRU EEPROM reading |
+| `src/Overlay.cpp` | Device tree overlay support |
+| `src/Utils.cpp` | Variable substitution, JSON parsing |
+
+---
+
 ## References
 
 - [Entity Manager Repository](https://github.com/openbmc/entity-manager)
