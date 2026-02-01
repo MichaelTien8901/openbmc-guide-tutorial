@@ -27,43 +27,45 @@ Configure power, reset, and ID buttons on OpenBMC.
 
 **phosphor-buttons** handles physical button inputs (power, reset, ID) and translates them to system actions.
 
-```
-+-------------------------------------------------------------------+
-|                     Buttons Architecture                          |
-+-------------------------------------------------------------------+
-|                                                                   |
-|  +------------------+  +------------------+  +------------------+ |
-|  |   Power Button   |  |   Reset Button   |  |    ID Button     | |
-|  |      (GPIO)      |  |      (GPIO)      |  |      (GPIO)      | |
-|  +--------+---------+  +--------+---------+  +--------+---------+ |
-|           |                     |                     |           |
-|           v                     v                     v           |
-|  +------------------------------------------------------------+   |
-|  |                    phosphor-buttons                        |   |
-|  |                                                            |   |
-|  |   +---------------+  +---------------+  +---------------+  |   |
-|  |   | Power Handler |  | Reset Handler |  |  ID Handler   |  |   |
-|  |   | (short/long)  |  |               |  |               |  |   |
-|  |   +---------------+  +---------------+  +---------------+  |   |
-|  |                                                            |   |
-|  +----------------------------+-------------------------------+   |
-|                               |                                   |
-|                               v                                   |
-|  +------------------------------------------------------------+   |
-|  |                         D-Bus                              |   |
-|  +----------------------------+-------------------------------+   |
-|                               |                                   |
-|           +-------------------+-------------------+               |
-|           |                                       |               |
-|           v                                       v               |
-|  +------------------+                   +------------------+      |
-|  |  State Manager   |                   |   LED Manager    |      |
-|  | (power control)  |                   | (identify LED)   |      |
-|  +------------------+                   +------------------+      |
-|                                                                   |
-+-------------------------------------------------------------------+
-```
-
+```mermaid
+flowchart TB
+    subgraph Buttons["Buttons Architecture"]
+        direction TB
+        
+        subgraph GPIO["GPIO Inputs"]
+            direction LR
+            PowerBtn["Power Button<br/>(GPIO)"]
+            ResetBtn["Reset Button<br/>(GPIO)"]
+            IDBtn["ID Button<br/>(GPIO)"]
+        end
+        
+        subgraph PhosphorButtons["phosphor-buttons"]
+            direction LR
+            PowerHandler["Power Handler<br/>(short/long)"]
+            ResetHandler["Reset Handler"]
+            IDHandler["ID Handler"]
+        end
+        
+        DBus["D-Bus"]
+        
+        subgraph Services["Services"]
+            direction LR
+            StateMgr["State Manager<br/>(power control)"]
+            LEDMgr["LED Manager<br/>(identify LED)"]
+        end
+        
+        PowerBtn --> PowerHandler
+        ResetBtn --> ResetHandler
+        IDBtn --> IDHandler
+        
+        PowerHandler --> DBus
+        ResetHandler --> DBus
+        IDHandler --> DBus
+        
+        DBus --> StateMgr
+        DBus --> LEDMgr
+    end
+```    
 ---
 
 ## Setup & Configuration

@@ -27,42 +27,31 @@ Configure host watchdog timer on OpenBMC.
 
 **phosphor-watchdog** monitors host health and triggers recovery actions if the host becomes unresponsive.
 
-```
-+--------------------------------------------------------------------+
-|                    Watchdog Architecture                           |
-+--------------------------------------------------------------------+
-|                                                                    |
-|  +-------------------+                                             |
-|  |   Host System     |                                             |
-|  |                   |                                             |
-|  |  +-----------+    |     Periodic "kick"                         |
-|  |  | Watchdog  |----+-------------------------+                   |
-|  |  | Agent     |    |                         |                   |
-|  |  +-----------+    |                         v                   |
-|  +-------------------+         +-------------------------------+   |
-|                                |      phosphor-watchdog        |   |
-|                                |                               |   |
-|                                |  +----------+  +----------+   |   |
-|                                |  | Enabled  |  | Interval |   |   |
-|                                |  | (bool)   |  | (usec)   |   |   |
-|                                |  +----------+  +----------+   |   |
-|                                |                               |   |
-|                                |  +--------------------------+ |   |
-|                                |  |    ExpireAction          | |   |
-|                                |  | (None/HardReset/PowerOff)| |   |
-|                                |  +-------------------------+  |   |
-|                                +---------------+---------------+   |
-|                                                |                   |
-|                          Timeout expired       |                   |
-|                                                v                   |
-|                                +-------------------------------+   |
-|                                |      State Manager            |   |
-|                                |   (Execute recovery action)   |   |
-|                                +-------------------------------+   |
-|                                                                    |
-+--------------------------------------------------------------------+
-```
-
+```mermaid
+flowchart TB
+    subgraph Watchdog["Watchdog Architecture"]
+        direction TB
+        
+        subgraph HostSystem["Host System"]
+            WatchdogAgent["Watchdog<br/>Agent"]
+        end
+        
+        subgraph PhosphorWatchdog["phosphor-watchdog"]
+            direction TB
+            subgraph Properties["Properties"]
+                direction LR
+                Enabled["Enabled<br/>(bool)"]
+                Interval["Interval<br/>(usec)"]
+            end
+            ExpireAction["ExpireAction<br/>(None/HardReset/PowerOff)"]
+        end
+        
+        StateMgr["State Manager<br/>(Execute recovery action)"]
+        
+        WatchdogAgent -->|"Periodic 'kick'"| PhosphorWatchdog
+        PhosphorWatchdog -->|"Timeout expired"| StateMgr
+    end
+```    
 ---
 
 ## Setup & Configuration
