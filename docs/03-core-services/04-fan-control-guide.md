@@ -839,6 +839,17 @@ Key implementation files in [phosphor-pid-control](https://github.com/openbmc/ph
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/fan-control](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/fan-control) directory:
+
+- `zone-config.json` - Basic zone configuration
+- `multi-zone-config.json` - Multi-zone setup
+- `stepwise-config.json` - Stepwise fan control
+- `entity-manager-fan.json` - Entity Manager fan configuration
+
+---
+
 ## References
 
 - [phosphor-pid-control](https://github.com/openbmc/phosphor-pid-control)

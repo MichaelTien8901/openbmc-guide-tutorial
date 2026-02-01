@@ -904,6 +904,17 @@ Key implementation files:
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/power](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/power) directory:
+
+- `power-config.json` - Power configuration
+- `regulators-config.json` - Voltage regulator configuration
+- `psu-entity-manager.json` - PSU Entity Manager configuration
+- `power-sequencer.sh` - Power sequencing script
+
+---
+
 ## References
 
 - [phosphor-power](https://github.com/openbmc/phosphor-power)

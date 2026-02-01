@@ -1,0 +1,51 @@
+# Custom Error Definition for phosphor-logging
+# Place in: phosphor-logging/xyz/openbmc_project/Example/Error.yaml
+
+# Example: Define custom errors for your application
+description: Example custom errors for demonstration
+
+errors:
+  - name: SensorReadFailure
+    description: Failed to read sensor value
+    metadata:
+      - name: SENSOR_NAME
+        type: string
+        description: Name of the sensor that failed
+      - name: ERRNO
+        type: int32
+        description: Error number from read operation
+
+  - name: ConfigurationInvalid
+    description: Invalid configuration detected
+    metadata:
+      - name: CONFIG_FILE
+        type: string
+        description: Path to invalid config file
+      - name: REASON
+        type: string
+        description: Reason for invalidity
+
+  - name: ThresholdExceeded
+    description: Sensor value exceeded threshold
+    metadata:
+      - name: SENSOR_NAME
+        type: string
+        description: Name of the sensor
+      - name: VALUE
+        type: double
+        description: Current sensor value
+      - name: THRESHOLD
+        type: double
+        description: Threshold that was exceeded
+
+# Usage in C++ code:
+# #include <xyz/openbmc_project/Example/Error/error.hpp>
+#
+# using SensorReadFailure =
+#     sdbusplus::xyz::openbmc_project::Example::Error::SensorReadFailure;
+#
+# phosphor::logging::report<SensorReadFailure>(
+#     phosphor::logging::xyz::openbmc_project::Example::
+#         Error::SensorReadFailure::SENSOR_NAME("temp_cpu0"),
+#     phosphor::logging::xyz::openbmc_project::Example::
+#         Error::SensorReadFailure::ERRNO(EIO));

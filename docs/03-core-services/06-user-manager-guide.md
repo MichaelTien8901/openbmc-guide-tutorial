@@ -622,6 +622,15 @@ Key implementation files in [phosphor-user-manager](https://github.com/openbmc/p
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/user-manager](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/user-manager) directory:
+
+- `user-management.sh` - User CRUD operations script
+- `ldap-config.json` - LDAP configuration example
+
+---
+
 ## References
 
 - [phosphor-user-manager](https://github.com/openbmc/phosphor-user-manager)

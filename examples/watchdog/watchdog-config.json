@@ -1,0 +1,33 @@
+{
+    "watchdog": {
+        "host0": {
+            "Enabled": false,
+            "Interval": 30000,
+            "ExpireAction": "HardReset",
+            "TimerUse": "BIOSFRB2",
+            "Comment": "Interval in milliseconds, ExpireAction: None, HardReset, PowerOff, PowerCycle"
+        }
+    },
+    "actions": {
+        "None": {
+            "description": "Log event only, no recovery action"
+        },
+        "HardReset": {
+            "description": "Force reset the host via chassis control"
+        },
+        "PowerOff": {
+            "description": "Force power off the host"
+        },
+        "PowerCycle": {
+            "description": "Power cycle the host (off then on)"
+        }
+    },
+    "timer_use": {
+        "Reserved": "Reserved for future use",
+        "BIOSFRB2": "BIOS FRB2 timeout",
+        "BIOSPOST": "BIOS POST timeout",
+        "OSLoad": "OS Load timeout",
+        "SMSOS": "SMS/OS timeout",
+        "OEM": "OEM-specific use"
+    }
+}

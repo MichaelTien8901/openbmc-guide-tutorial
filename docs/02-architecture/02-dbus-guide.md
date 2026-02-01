@@ -478,6 +478,16 @@ busctl introspect <service> <object> | grep interface
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/dbus](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/dbus) directory:
+
+- `client/` - D-Bus client examples
+- `server/` - D-Bus server/service examples
+- `async/` - Asynchronous D-Bus programming
+
+---
+
 ## References
 
 - [phosphor-dbus-interfaces](https://github.com/openbmc/phosphor-dbus-interfaces)

@@ -662,6 +662,16 @@ Key implementation files in [phosphor-led-manager](https://github.com/openbmc/ph
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/led-manager](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/led-manager) directory:
+
+- `led-groups.json` - LED group definitions
+- `led-config.yaml` - Physical LED to D-Bus mapping
+- `identify-led.sh` - Script to control identify LED
+
+---
+
 ## References
 
 - [phosphor-led-manager](https://github.com/openbmc/phosphor-led-manager)

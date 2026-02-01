@@ -1000,6 +1000,19 @@ Key implementation files in [entity-manager](https://github.com/openbmc/entity-m
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/entity-manager](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/entity-manager) directory:
+
+- `baseboard.json` - Baseboard configuration with probes
+- `temperature-sensors.json` - Temperature sensor configuration
+- `adc-sensors.json` - ADC sensor configuration
+- `fans.json` - Fan configuration
+- `psu.json` - Power supply configuration
+- `fru-eeprom.json` - FRU EEPROM configuration
+
+---
+
 ## References
 
 - [Entity Manager Repository](https://github.com/openbmc/entity-manager)

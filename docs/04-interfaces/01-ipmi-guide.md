@@ -891,6 +891,17 @@ Key implementation files in [phosphor-host-ipmid](https://github.com/openbmc/pho
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/ipmi](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/ipmi) directory:
+
+- `oem_handler.cpp` - OEM IPMI command handler
+- `oem_handler.hpp` - OEM handler header
+- `meson.build` / `CMakeLists.txt` - Build configuration
+- `myoem-ipmi.bb` - BitBake recipe
+
+---
+
 ## References
 
 - [phosphor-host-ipmid](https://github.com/openbmc/phosphor-host-ipmid) - D-Bus based IPMI daemon

@@ -1216,6 +1216,16 @@ Key implementation files in [bmcweb](https://github.com/openbmc/bmcweb):
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/redfish](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/redfish) directory:
+
+- `oem_resource.hpp` - Custom OEM resource implementation
+- `oem-schema.json` - OEM schema definition
+- `test_oem_resource.sh` - OEM resource test script
+
+---
+
 ## References
 
 - [bmcweb](https://github.com/openbmc/bmcweb)

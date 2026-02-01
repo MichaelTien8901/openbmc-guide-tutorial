@@ -1,0 +1,25 @@
+# LED Physical Configuration
+# Maps logical LED names to hardware paths
+
+identify:
+    # GPIO-based LED
+    path: /sys/class/leds/identify
+    # Or sysfs GPIO
+    # path: /sys/class/gpio/gpio42/value
+
+fault:
+    path: /sys/class/leds/fault
+
+power:
+    path: /sys/class/leds/power
+
+heartbeat:
+    path: /sys/class/leds/heartbeat
+
+# Multi-color LED example
+status:
+    path: /sys/class/leds/status
+    colors:
+        green: /sys/class/leds/status:green
+        amber: /sys/class/leds/status:amber
+        red: /sys/class/leds/status:red

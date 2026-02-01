@@ -1998,6 +1998,15 @@ ipmitool -I lanplus -H <bmc-ip> -U root -P 0penBmc chassis status
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/firmware-update](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/firmware-update) directory:
+
+- `firmware-update.sh` - Firmware update helper script
+- `version-check.sh` - Check current firmware versions
+
+---
+
 ## References
 
 ### OpenBMC Repositories

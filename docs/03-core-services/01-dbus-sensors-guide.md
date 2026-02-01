@@ -792,6 +792,16 @@ Key implementation files in [dbus-sensors](https://github.com/openbmc/dbus-senso
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/sensors](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/sensors) directory:
+
+- `sensor_reader.cpp` - C++ sensor reading example
+- `external-sensor/` - External sensor daemon example
+- `virtual-sensor/` - Virtual sensor configuration
+
+---
+
 ## References
 
 - [dbus-sensors](https://github.com/openbmc/dbus-sensors)

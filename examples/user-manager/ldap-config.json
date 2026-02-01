@@ -1,0 +1,43 @@
+{
+    "ldap": {
+        "enabled": true,
+        "server_uri": "ldap://ldap.example.com:389",
+        "bind_dn": "cn=readonly,dc=example,dc=com",
+        "bind_password": "readonly_password",
+        "base_dn": "ou=users,dc=example,dc=com",
+        "search_scope": "sub",
+
+        "user_attribute": "uid",
+        "group_attribute": "memberOf",
+
+        "tls": {
+            "enabled": true,
+            "verify_certificate": true,
+            "ca_certificate_path": "/etc/ssl/certs/ldap-ca.pem"
+        },
+
+        "group_role_mapping": [
+            {
+                "group_dn": "cn=bmc-admins,ou=groups,dc=example,dc=com",
+                "local_role": "priv-admin"
+            },
+            {
+                "group_dn": "cn=bmc-operators,ou=groups,dc=example,dc=com",
+                "local_role": "priv-operator"
+            },
+            {
+                "group_dn": "cn=bmc-users,ou=groups,dc=example,dc=com",
+                "local_role": "priv-user"
+            }
+        ]
+    },
+
+    "active_directory": {
+        "enabled": false,
+        "server_uri": "ldap://ad.example.com:389",
+        "bind_dn": "CN=BMC Service,OU=Service Accounts,DC=example,DC=com",
+        "base_dn": "OU=Users,DC=example,DC=com",
+        "user_attribute": "sAMAccountName",
+        "group_attribute": "memberOf"
+    }
+}
