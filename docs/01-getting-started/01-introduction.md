@@ -139,6 +139,56 @@ OpenBMC uses a modern, service-oriented architecture:
 
 ---
 
+## Development Environment
+
+### QEMU: The Standard Development Platform
+
+OpenBMC development does **not require physical BMC hardware**. QEMU emulation is the standard development environment used by professional OpenBMC developers at major companies.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Your Development Machine                    │
+│                                                             │
+│   ┌─────────────────────────────────────────────────────┐   │
+│   │                   QEMU (ast2600-evb)                │   │
+│   │  ┌───────────────────────────────────────────────┐  │   │
+│   │  │              OpenBMC Image                    │  │   │
+│   │  │                                               │  │   │
+│   │  │  • Full D-Bus services                       │  │   │
+│   │  │  • Redfish API (bmcweb)                      │  │   │
+│   │  │  • IPMI daemon                               │  │   │
+│   │  │  • Sensor management                         │  │   │
+│   │  │  • State management                          │  │   │
+│   │  │  • All phosphor-* services                   │  │   │
+│   │  └───────────────────────────────────────────────┘  │   │
+│   └─────────────────────────────────────────────────────┘   │
+│                            │                                 │
+│              Port forwarding: SSH, HTTPS, IPMI              │
+│                            ▼                                 │
+│   ┌─────────────────────────────────────────────────────┐   │
+│   │  Test with: curl, ipmitool, ssh, browser           │   │
+│   └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### What You Can Learn with QEMU
+
+| Topic | QEMU Support | Notes |
+|-------|--------------|-------|
+| OpenBMC architecture | ✅ Full | All services run identically |
+| D-Bus communication | ✅ Full | Same as real hardware |
+| Redfish API development | ✅ Full | Complete API available |
+| IPMI commands | ✅ Full | ipmitool works |
+| Yocto/BitBake builds | ✅ Full | Standard workflow |
+| Service development | ✅ Full | Code, build, test cycle |
+| Sensor configuration | ✅ Simulated | Values are synthetic |
+| Fan control logic | ✅ Simulated | PID algorithms work |
+
+{: .note }
+Physical BMC hardware (ASPEED AST2600 EVB ~$500+) is only needed for hardware bring-up tasks like eSPI debugging, PECI communication, or real sensor calibration. These are specialized topics not required for learning OpenBMC software development.
+
+---
+
 ## Getting Started Path
 
 Ready to start? Here's your learning path:

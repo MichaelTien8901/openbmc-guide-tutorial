@@ -24,7 +24,10 @@ Build and run your first OpenBMC image in QEMU.
 
 ## Overview
 
-This guide walks you through building an OpenBMC image and running it in the QEMU emulator.
+This guide walks you through building an OpenBMC image and running it in QEMU.
+
+{: .tip }
+**QEMU is not a compromise** — it's the standard development environment used by professional OpenBMC developers. You'll have access to 100% of the OpenBMC software stack, including all D-Bus services, Redfish API, IPMI, and management interfaces.
 
 ---
 
@@ -68,6 +71,13 @@ bitbake obmc-phosphor-image-minimal
 ---
 
 ## Run in QEMU
+
+QEMU provides a complete OpenBMC environment where you can:
+- Access all D-Bus services exactly as on real hardware
+- Test Redfish API endpoints with curl or any HTTP client
+- Use ipmitool for IPMI commands
+- SSH into the BMC and run commands
+- Develop and debug services with full functionality
 
 ### Locate the Image
 

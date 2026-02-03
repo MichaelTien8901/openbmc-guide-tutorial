@@ -15,12 +15,48 @@ This section covers everything you need to start developing with OpenBMC.
 - Set up a development environment on Linux, macOS, or Windows (via Docker)
 - Clone and configure the OpenBMC repositories
 - Build your first OpenBMC image
-- Run and test in QEMU emulator
+- Run and test in QEMU (the standard development environment)
 - Use the SDK for application development
+
+## No Hardware Required
+
+{: .tip }
+**QEMU is the standard development environment for OpenBMC** — not a compromise or simulation fallback. Professional OpenBMC developers at Google, Meta, IBM, and other companies use QEMU daily for most development work.
+
+### Why QEMU is the Right Choice
+
+| What QEMU Provides | Coverage |
+|-------------------|----------|
+| Full OpenBMC software stack | ✅ 100% |
+| D-Bus architecture and all services | ✅ 100% |
+| Redfish API (bmcweb) | ✅ 100% |
+| IPMI interface (ipmitool works) | ✅ 100% |
+| Yocto/BitBake build system | ✅ 100% |
+| Code modification and testing | ✅ 100% |
+| Sensor/fan/power state management | ✅ Simulated |
+
+### What Requires Real Hardware
+
+Only specialized hardware bring-up tasks need physical BMC hardware:
+
+- eSPI/LPC host interface debugging
+- PECI CPU communication
+- Real sensor calibration
+- Platform-specific GPIO timing
+
+These topics are relevant only for hardware engineers doing board bring-up — not for learning OpenBMC software development.
+
+### Hardware Cost Reality
+
+| Option | Cost | Practicality |
+|--------|------|--------------|
+| **QEMU** | Free | ✅ Best for learning and development |
+| ASPEED AST2600 EVB | $500-800 | ❌ Too expensive for most |
+| Raspberry Pi | $35-75 | ❌ Cannot run OpenBMC (wrong SoC) |
 
 ## Prerequisites
 
-- A Linux workstation (Ubuntu 20.04+ or Fedora 34+ recommended) OR Docker
+- A Linux workstation (Ubuntu 22.04+ or Fedora 38+ recommended) OR Docker
 - At least 16GB RAM (32GB recommended)
 - 100GB+ free disk space
 - Basic command line experience
