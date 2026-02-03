@@ -1,0 +1,78 @@
+{
+    "Exposes": [
+        {
+            "Address": "0x40",
+            "Bus": 3,
+            "Name": "P12V",
+            "Type": "ADM1275",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 13.2
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 10.8
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper non critical",
+                    "Severity": 0,
+                    "Value": 12.6
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower non critical",
+                    "Severity": 0,
+                    "Value": 11.4
+                }
+            ]
+        },
+        {
+            "Address": "0x41",
+            "Bus": 3,
+            "Name": "P5V",
+            "Type": "ADM1275",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 5.5
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 4.5
+                }
+            ]
+        },
+        {
+            "Address": "0x42",
+            "Bus": 3,
+            "Name": "P3V3",
+            "Type": "ADM1275",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 3.6
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 3.0
+                }
+            ]
+        }
+    ],
+    "Name": "Power Regulators",
+    "Probe": "xyz.openbmc_project.FruDevice({'PRODUCT_PRODUCT_NAME': 'PowerBoard'})"
+}

@@ -1,0 +1,66 @@
+{
+    "Exposes": [
+        {
+            "Address": "0x48",
+            "Bus": 6,
+            "Name": "CPU0 Temp",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 95
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper non critical",
+                    "Severity": 0,
+                    "Value": 85
+                }
+            ],
+            "Type": "TMP75"
+        },
+        {
+            "Address": "0x49",
+            "Bus": 6,
+            "Name": "CPU1 Temp",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 95
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper non critical",
+                    "Severity": 0,
+                    "Value": 85
+                }
+            ],
+            "Type": "TMP75"
+        },
+        {
+            "Address": "0x4A",
+            "Bus": 6,
+            "Name": "Ambient Temp",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 45
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper non critical",
+                    "Severity": 0,
+                    "Value": 40
+                }
+            ],
+            "Type": "TMP75"
+        }
+    ],
+    "Name": "Motherboard Temperature Sensors",
+    "Probe": "xyz.openbmc_project.FruDevice({'PRODUCT_PRODUCT_NAME': '.*Motherboard.*'})"
+}

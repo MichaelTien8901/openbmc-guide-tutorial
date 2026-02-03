@@ -62,6 +62,7 @@ Port OpenBMC to your custom hardware platform.
 | [U-Boot]({% link docs/06-porting/04-uboot.md %})                        | Bootloader setup      | Configuration |
 | [Verification]({% link docs/06-porting/05-verification.md %})           | Testing procedures    | Validation    |
 | [ARM Platform Guide]({% link docs/06-porting/06-arm-platform-guide.md %}) | ARM server platforms | Advanced      |
+| [Entity Manager Advanced]({% link docs/06-porting/07-entity-manager-advanced.md %}) | Dynamic hardware config | Advanced |
 
 ## Supported BMC SoCs
 

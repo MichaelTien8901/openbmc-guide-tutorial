@@ -223,6 +223,11 @@ bitbake obmc-phosphor-image
 
 ---
 
+## Next Steps
+
+- [Device Tree]({% link docs/06-porting/03-device-tree.md %}) - Configure BMC SoC peripherals
+- [Entity Manager Advanced]({% link docs/06-porting/07-entity-manager-advanced.md %}) - Dynamic hardware configuration
+
 ## References
 
 - [Yocto Machine Configuration](https://docs.yoctoproject.org/ref-manual/variables.html#term-MACHINE)

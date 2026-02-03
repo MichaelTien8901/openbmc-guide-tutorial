@@ -1013,6 +1013,12 @@ Working examples are available in the [examples/entity-manager](https://github.c
 
 ---
 
+## Next Steps
+
+For advanced Entity Manager topics including complex probing, FRU integration, and debugging:
+
+- [Entity Manager Advanced]({% link docs/06-porting/07-entity-manager-advanced.md %}) - Regex probes, FruDevice, troubleshooting
+
 ## References
 
 - [Entity Manager Repository](https://github.com/openbmc/entity-manager)

@@ -1,0 +1,42 @@
+{
+    "Exposes": [
+        {
+            "Connector": {
+                "Name": "System Fan 1",
+                "Pwm": 0,
+                "Tachs": [0]
+            },
+            "Name": "Fan 1",
+            "Type": "AspeedFan"
+        },
+        {
+            "Connector": {
+                "Name": "System Fan 2",
+                "Pwm": 1,
+                "Tachs": [1]
+            },
+            "Name": "Fan 2",
+            "Type": "AspeedFan"
+        },
+        {
+            "Connector": {
+                "Name": "System Fan 3",
+                "Pwm": 2,
+                "Tachs": [2]
+            },
+            "Name": "Fan 3",
+            "Type": "AspeedFan"
+        },
+        {
+            "Connector": {
+                "Name": "System Fan 4",
+                "Pwm": 3,
+                "Tachs": [3]
+            },
+            "Name": "Fan 4",
+            "Type": "AspeedFan"
+        }
+    ],
+    "Name": "Chassis Fans",
+    "Probe": "xyz.openbmc_project.FruDevice({'PRODUCT_PRODUCT_NAME': 'Chassis'})"
+}
