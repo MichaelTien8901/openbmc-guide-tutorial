@@ -92,8 +92,8 @@ ls tmp/deploy/images/ast2600-evb/
 
 ### Start QEMU
 
-{: .note }
-QEMU 6.0+ is required for ast2600-evb support. Check with `qemu-system-arm --version`.
+{: .warning }
+**QEMU 7.0+ is required** for ast2600-evb support. Stock QEMU on Ubuntu 20.04/22.04 may not include this machine. Check with `qemu-system-arm -machine help | grep ast2600`. If not found, see [Building QEMU]({% link docs/01-getting-started/05-qemu-build.md %}).
 
 ```bash
 # Run QEMU manually:

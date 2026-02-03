@@ -256,22 +256,27 @@ QEMU allows testing OpenBMC without physical hardware.
 
 ### Install QEMU
 
-**Ubuntu:**
+**Ubuntu 24.04+ / Fedora 38+:**
 ```bash
+# Ubuntu
 sudo apt install -y qemu-system-arm
-```
 
-**Fedora:**
-```bash
+# Fedora
 sudo dnf install -y qemu-system-arm
 ```
 
-### Verify QEMU
+### Verify QEMU Has ASPEED Support
 
 ```bash
+# Check version (need 7.0+ for ast2600-evb)
 qemu-system-arm --version
-# Should be version 4.0 or later
+
+# Verify ast2600-evb machine is available
+qemu-system-arm -machine help | grep ast2600
 ```
+
+{: .warning }
+**Older distributions** (Ubuntu 20.04/22.04, Debian 11) may not have ast2600-evb support in their package QEMU. If `grep ast2600` returns nothing, see [Building QEMU]({% link docs/01-getting-started/05-qemu-build.md %}) to build from source or use OpenBMC's built-in QEMU.
 
 QEMU usage is covered in the [First Build]({% link docs/01-getting-started/03-first-build.md %}) guide.
 

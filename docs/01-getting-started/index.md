@@ -69,6 +69,7 @@ These topics are relevant only for hardware engineers doing board bring-up — n
 | [Environment Setup]({% link docs/01-getting-started/02-environment-setup.md %}) | Set up your development environment | 30 min |
 | [First Build]({% link docs/01-getting-started/03-first-build.md %}) | Build and run OpenBMC in QEMU | 45 min |
 | [Development Workflow]({% link docs/01-getting-started/04-development-workflow.md %}) | Iterate quickly with devtool and bbappend | 30 min |
+| [Building QEMU]({% link docs/01-getting-started/05-qemu-build.md %}) | Build QEMU from source if needed | 20 min |
 
 ## Quick Path
 
