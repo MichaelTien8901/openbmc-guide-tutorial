@@ -465,9 +465,11 @@ Execute obmcutil Command
 
 ## Example Test Files
 
-Create example Robot tests in `examples/robot/`:
+Working examples are available in the [examples/robot](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/robot) directory:
 
-<examples will be created separately>
+- `hello_openbmc.robot` - Basic connectivity and Redfish authentication tests
+- `redfish_sensors.robot` - Sensor reading and validation tests
+- `ssh_commands.robot` - SSH command execution tests
 
 ---
 

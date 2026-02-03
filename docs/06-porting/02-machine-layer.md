@@ -223,6 +223,15 @@ bitbake obmc-phosphor-image
 
 ---
 
+## Example Machine Layer
+
+Working examples are available in the [examples/porting](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/porting) directory:
+
+- `meta-myplatform/` - Complete template machine layer with Entity Manager configuration
+- `README.md` - Quick start guide for customizing the template
+
+---
+
 ## Next Steps
 
 - [Device Tree]({% link docs/06-porting/03-device-tree.md %}) - Configure BMC SoC peripherals
