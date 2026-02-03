@@ -25,7 +25,7 @@ Master dynamic hardware configuration with advanced probing, FRU integration, an
 
 ## Overview
 
-This guide covers advanced Entity Manager topics for complex hardware configurations. For basic Entity Manager concepts, see the [Entity Manager Guide]({% link docs/03-core-services/04-entity-manager-guide.md %}).
+This guide covers advanced Entity Manager topics for complex hardware configurations. For basic Entity Manager concepts, see the [Entity Manager Guide]({% link docs/03-core-services/03-entity-manager-guide.md %}).
 
 Entity Manager dynamically discovers hardware using JSON configuration files with "probes" that match system conditions. When probes match, Entity Manager exposes D-Bus objects that other services (sensors, fan control) use.
 
