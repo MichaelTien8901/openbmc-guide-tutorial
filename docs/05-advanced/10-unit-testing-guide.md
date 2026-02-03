@@ -546,6 +546,87 @@ meson test -C builddir -v
 
 ---
 
+## Try It Yourself
+
+### Standalone Examples (No OpenBMC Required)
+
+Build and run the example tests from this tutorial:
+
+```bash
+# Clone the tutorial repository
+git clone https://github.com/MichaelTien8901/openbmc-guide-tutorial.git
+cd openbmc-guide-tutorial/examples/testing
+
+# Option 1: CMake (auto-downloads GTest)
+mkdir build && cd build
+cmake ..
+make
+ctest --output-on-failure
+
+# Option 2: Make (requires GTest installed)
+# sudo apt install libgtest-dev libgmock-dev
+make
+make test
+```
+
+Expected output:
+```
+[==========] Running 7 tests from 2 test suites.
+[----------] 2 tests from SensorManagerBasicTest
+[ RUN      ] SensorManagerBasicTest.InitiallyEmpty
+[       OK ] SensorManagerBasicTest.InitiallyEmpty (0 ms)
+...
+[  PASSED  ] 7 tests.
+```
+
+### Real OpenBMC Test Suites
+
+After learning the basics, try running tests from actual OpenBMC repositories:
+
+#### phosphor-logging (Event Logging)
+
+```bash
+git clone https://github.com/openbmc/phosphor-logging
+cd phosphor-logging
+
+# Install dependencies (on Ubuntu)
+sudo apt install meson ninja-build pkg-config \
+    libsdbusplus-dev libphosphor-dbus-interfaces-dev \
+    libcereal-dev nlohmann-json3-dev
+
+# Build with tests
+meson setup builddir -Dtests=enabled
+meson compile -C builddir
+
+# Run tests
+meson test -C builddir -v
+```
+
+#### dbus-sensors (Sensor Daemons)
+
+```bash
+git clone https://github.com/openbmc/dbus-sensors
+cd dbus-sensors
+meson setup builddir -Dtests=enabled
+meson compile -C builddir
+meson test -C builddir -v
+```
+
+#### bmcweb (Redfish Server)
+
+```bash
+git clone https://github.com/openbmc/bmcweb
+cd bmcweb
+meson setup builddir -Dtests=enabled
+meson compile -C builddir
+meson test -C builddir -v
+```
+
+{: .tip }
+If dependency installation is complex, use the OpenBMC SDK which includes all required libraries pre-installed.
+
+---
+
 ## Best Practices
 
 ### Test Organization
