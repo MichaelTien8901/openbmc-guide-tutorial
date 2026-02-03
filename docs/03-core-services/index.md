@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Core Services
-nav_order: 3
+nav_order: 4
 has_children: true
 permalink: /docs/core-services
 ---

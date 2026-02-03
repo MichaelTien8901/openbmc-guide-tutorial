@@ -25,6 +25,19 @@ Welcome to the comprehensive OpenBMC development guide. This tutorial takes you 
 2. [Build your first image]({% link docs/01-getting-started/03-first-build.md %})
 3. [Understand the architecture]({% link docs/02-architecture/01-openbmc-overview.md %})
 
+## Choose Your Path
+
+Not sure where to start? We have [curated learning paths]({% link docs/learning-paths.md %}) for different experience levels and roles:
+
+| Path | Best For |
+|------|----------|
+| [Beginner]({% link docs/learning-paths.md %}#beginner-path) | New to OpenBMC, learning fundamentals |
+| [Intermediate]({% link docs/learning-paths.md %}#intermediate-path) | Ready for core services and interfaces |
+| [Advanced]({% link docs/learning-paths.md %}#advanced-path) | Complex topics and platform porting |
+| [Software Developer]({% link docs/learning-paths.md %}#software-developer-path) | Writing OpenBMC services and code |
+| [System Operator]({% link docs/learning-paths.md %}#system-operator-path) | Managing BMC-enabled servers |
+| [Hardware Engineer]({% link docs/learning-paths.md %}#hardware-engineer-path) | Porting to new platforms |
+
 ## How This Guide is Organized
 
 | Section | Description | Difficulty |
