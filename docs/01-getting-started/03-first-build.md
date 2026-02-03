@@ -41,10 +41,10 @@ cd openbmc
 ## Initialize Build Environment
 
 ```bash
-# Set up environment for romulus machine (QEMU-compatible)
-. setup romulus
+# Set up environment for ast2600-evb machine (QEMU-compatible)
+. setup ast2600-evb
 
-# This creates a build directory and configures for romulus
+# This creates a build directory and configures for ast2600-evb
 ```
 
 ---
@@ -73,26 +73,26 @@ bitbake obmc-phosphor-image-minimal
 
 ```bash
 # Find the built image
-ls tmp/deploy/images/romulus/
+ls tmp/deploy/images/ast2600-evb/
 
 # Key files:
-# - obmc-phosphor-image-romulus.static.mtd (flash image)
-# - fitImage-obmc-phosphor-initramfs-romulus (kernel)
+# - obmc-phosphor-image-ast2600-evb.static.mtd (flash image)
+# - fitImage-obmc-phosphor-initramfs-ast2600-evb (kernel)
 ```
 
 ### Start QEMU
 
-```bash
-# Using the provided QEMU script
-./meta-romulus/conf/run-qemu.sh
+{: .note }
+QEMU 6.0+ is required for ast2600-evb support. Check with `qemu-system-arm --version`.
 
-# Or manually:
-qemu-system-arm -m 256 \
-    -M romulus-bmc \
+```bash
+# Run QEMU manually:
+qemu-system-arm -m 1G \
+    -M ast2600-evb \
     -nographic \
-    -drive file=tmp/deploy/images/romulus/obmc-phosphor-image-romulus.static.mtd,format=raw,if=mtd \
+    -drive file=tmp/deploy/images/ast2600-evb/obmc-phosphor-image-ast2600-evb.static.mtd,format=raw,if=mtd \
     -net nic \
-    -net user,hostfwd=tcp::2222-:22,hostfwd=tcp::2443-:443,hostfwd=tcp::2623-:623
+    -net user,hostfwd=tcp::2222-:22,hostfwd=tcp::2443-:443,hostfwd=udp::2623-:623
 ```
 
 ### Default Credentials
@@ -194,7 +194,7 @@ bitbake obmc-phosphor-image
 qemu-system-arm --version
 
 # Verify image exists
-ls -la tmp/deploy/images/romulus/*.mtd
+ls -la tmp/deploy/images/ast2600-evb/*.mtd
 ```
 
 ### Can't Connect
@@ -211,6 +211,7 @@ netstat -tlnp | grep 2222
 
 ## Next Steps
 
+- [Development Workflow]({% link docs/01-getting-started/04-development-workflow.md %}) - Iterate quickly with devtool
 - [OpenBMC Overview]({% link docs/02-architecture/01-openbmc-overview.md %}) - Understand the architecture
 - [D-Bus Guide]({% link docs/02-architecture/02-dbus-guide.md %}) - Learn D-Bus communication
 - [Sensor Guide]({% link docs/03-core-services/01-dbus-sensors-guide.md %}) - Configure sensors

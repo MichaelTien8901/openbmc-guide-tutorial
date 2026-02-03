@@ -119,14 +119,14 @@ ls meta-*/meta-*/conf/machine/*.conf | head -20
 ```bash
 # Source the environment script
 # This sets up paths and creates the build directory
-. setup romulus
+. setup ast2600-evb
 
 # You're now in the build directory
 # The terminal prompt changes to indicate the environment is active
 ```
 
 {: .note }
-`romulus` is a reference machine good for learning. Replace with your target machine for real development.
+`ast2600-evb` is an AST2600-based evaluation board, ideal for learning modern OpenBMC. Replace with your target machine for production development.
 
 ---
 
@@ -165,7 +165,7 @@ docker run --rm -it \
     -v $(pwd):/home/openbmc/openbmc \
     -w /home/openbmc/openbmc \
     crops/poky:ubuntu-22.04 \
-    /bin/bash -c ". setup romulus && bitbake obmc-phosphor-image"
+    /bin/bash -c ". setup ast2600-evb && bitbake obmc-phosphor-image"
 ```
 
 ### Custom Dockerfile (Alternative)
@@ -381,6 +381,8 @@ docker --version
 Your environment is ready! Continue to:
 
 ➡️ **[First Build]({% link docs/01-getting-started/03-first-build.md %})** - Build OpenBMC and run in QEMU
+
+➡️ **[Development Workflow]({% link docs/01-getting-started/04-development-workflow.md %})** - Learn devtool for rapid iteration
 
 ### Debug Builds (Optional)
 

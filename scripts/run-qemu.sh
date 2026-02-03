@@ -5,7 +5,7 @@
 set -e
 
 # Defaults
-MACHINE="${1:-romulus}"
+MACHINE="${1:-ast2600-evb}"
 IMAGE_PATH="${2:-}"
 
 # Find image if not specified
@@ -31,8 +31,9 @@ if [ -z "$IMAGE_PATH" ] || [ ! -f "$IMAGE_PATH" ]; then
     echo "Usage: $0 [machine] [image-path]"
     echo ""
     echo "Example:"
-    echo "  $0 romulus"
-    echo "  $0 romulus /path/to/obmc-phosphor-image-romulus.static.mtd"
+    echo "  $0 ast2600-evb"
+    echo "  $0 ast2600-evb /path/to/obmc-phosphor-image-ast2600-evb.static.mtd"
+    echo "  $0 romulus      # For legacy AST2500 machines"
     echo ""
     echo "Build an image first with:"
     echo "  . setup ${MACHINE}"
@@ -57,10 +58,24 @@ echo "Press Ctrl+A, X to exit QEMU"
 echo "=========================================="
 echo ""
 
+# Determine memory and machine name based on SoC type
+case "${MACHINE}" in
+    ast2600-evb|rainier*|fuji*|fby35*)
+        # AST2600-based machines need 1GB RAM
+        QEMU_MEM="1G"
+        QEMU_MACHINE="${MACHINE}"
+        ;;
+    *)
+        # AST2500-based machines (romulus, etc.) use 256MB RAM
+        QEMU_MEM="256"
+        QEMU_MACHINE="${MACHINE}-bmc"
+        ;;
+esac
+
 # Run QEMU
 qemu-system-arm \
-    -m 256 \
-    -M "${MACHINE}-bmc" \
+    -m "${QEMU_MEM}" \
+    -M "${QEMU_MACHINE}" \
     -nographic \
     -drive "file=${IMAGE_PATH},format=raw,if=mtd" \
     -net nic \

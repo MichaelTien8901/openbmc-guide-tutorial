@@ -32,6 +32,7 @@ This section covers everything you need to start developing with OpenBMC.
 | [Introduction]({% link docs/01-getting-started/01-introduction.md %}) | What is OpenBMC and why use it | 10 min |
 | [Environment Setup]({% link docs/01-getting-started/02-environment-setup.md %}) | Set up your development environment | 30 min |
 | [First Build]({% link docs/01-getting-started/03-first-build.md %}) | Build and run OpenBMC in QEMU | 45 min |
+| [Development Workflow]({% link docs/01-getting-started/04-development-workflow.md %}) | Iterate quickly with devtool and bbappend | 30 min |
 
 ## Quick Path
 
