@@ -475,6 +475,7 @@ git log --oneline -5
 - [D-Bus Guide]({% link docs/02-architecture/02-dbus-guide.md %}) - Understand how services communicate
 - [Sensor Guide]({% link docs/03-core-services/01-dbus-sensors-guide.md %}) - Modify sensor configurations
 - [Machine Layer]({% link docs/06-porting/02-machine-layer.md %}) - Create custom platform layers
+- [Unit Testing Guide]({% link docs/05-advanced/10-unit-testing-guide.md %}) - Write GTest/GMock tests for your code
 
 ---
 

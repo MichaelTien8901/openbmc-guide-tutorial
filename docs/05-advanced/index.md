@@ -18,6 +18,8 @@ Dive into advanced protocols, security features, logging, and debug capabilities
 - Firmware update mechanisms
 - Linux kernel and application debugging (sanitizers, Valgrind)
 - eSPI communication (virtual wires, console, eDAF)
+- Unit testing with GTest/GMock
+- Integration testing with Robot Framework
 
 ## Topics
 
@@ -62,6 +64,15 @@ Low-level interfaces for BMC-to-host communication.
 | Guide | Description | Platform |
 |-------|-------------|----------|
 | [eSPI]({% link docs/05-advanced/09-espi-guide.md %}) | Virtual wires, console, eDAF boot | Intel/AMD |
+
+### Testing
+
+Validate code correctness with unit tests and system behavior with integration tests.
+
+| Guide | Description | Scope |
+|-------|-------------|-------|
+| [Unit Testing]({% link docs/05-advanced/10-unit-testing-guide.md %}) | GTest/GMock for C++ unit tests | Single function/class |
+| [Robot Framework]({% link docs/05-advanced/11-robot-framework-guide.md %}) | Integration testing with openbmc-test-automation | Full system behavior |
 
 ## Protocol Stack
 

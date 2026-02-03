@@ -345,6 +345,11 @@ Verify Power On Works
 
 ---
 
+## Next Steps
+
+- [Robot Framework Guide]({% link docs/05-advanced/11-robot-framework-guide.md %}) - Detailed integration testing guide
+- [Unit Testing Guide]({% link docs/05-advanced/10-unit-testing-guide.md %}) - GTest/GMock unit tests
+
 ## References
 
 - [OpenBMC Test Documentation](https://github.com/openbmc/openbmc-test-automation)
