@@ -1,0 +1,129 @@
+<!-- Mermaid diagrams with paper-like background -->
+<style>
+  /* Mermaid container - paper-like background */
+  .mermaid,
+  pre.mermaid,
+  .language-mermaid,
+  code.language-mermaid {
+    background-color: #d5d0c8 !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    margin: 16px 0 !important;
+    display: block !important;
+  }
+
+  /* All text in Mermaid - dark gray */
+  .mermaid text,
+  .mermaid tspan,
+  .mermaid .nodeLabel,
+  .mermaid .label,
+  .mermaid .edgeLabel,
+  .mermaid .cluster-label,
+  .mermaid .messageText,
+  .mermaid .loopText,
+  .mermaid .noteText,
+  .mermaid .labelText,
+  .mermaid .actor {
+    fill: #2c3e50 !important;
+    color: #2c3e50 !important;
+  }
+
+  /* All lines and arrows - dark gray */
+  .mermaid path,
+  .mermaid .edgePath path,
+  .mermaid .flowchart-link,
+  .mermaid .messageLine0,
+  .mermaid .messageLine1,
+  .mermaid .relation {
+    stroke: #4a5568 !important;
+  }
+
+  /* Sequence diagram actor lifelines - force visible */
+  line[id^="actor"] {
+    stroke: #000000 !important;
+    stroke-width: 0.5px !important;
+  }
+
+  /* Sequence diagram message lines */
+  .mermaid .messageText {
+    fill: #2c3e50 !important;
+  }
+
+  .mermaid .messageLine0,
+  .mermaid .messageLine1 {
+    stroke: #4a5568 !important;
+    stroke-width: 1.5px !important;
+  }
+
+  .mermaid marker path,
+  .mermaid .arrowheadPath {
+    fill: #4a5568 !important;
+    stroke: #4a5568 !important;
+  }
+
+  /* Node backgrounds - paper tones */
+  .mermaid .node rect,
+  .mermaid .node circle,
+  .mermaid .node ellipse,
+  .mermaid .node polygon,
+  .mermaid .node path {
+    fill: #c5c0b8 !important;
+    stroke: #8a8578 !important;
+  }
+
+  /* Cluster backgrounds */
+  .mermaid .cluster rect {
+    fill: #cac5bd !important;
+    stroke: #8a8578 !important;
+  }
+
+  /* Actor boxes in sequence diagrams */
+  .mermaid .actor-box,
+  .mermaid rect.actor {
+    fill: #c5c0b8 !important;
+    stroke: #8a8578 !important;
+  }
+
+  /* Notes - slightly warmer */
+  .mermaid .note {
+    fill: #ddd8c8 !important;
+    stroke: #a89878 !important;
+  }
+
+  /* Mindmap nodes */
+  .mermaid .mindmap-node rect,
+  .mermaid .mindmap-node circle {
+    fill: #c5c0b8 !important;
+    stroke: #8a8578 !important;
+  }
+
+  .mermaid .mindmap-edges path {
+    stroke: #4a5568 !important;
+    stroke-width: 2px !important;
+  }
+</style>
+
+<!-- Fix sequence diagram lifelines after mermaid renders -->
+<script>
+(function() {
+  function fixActorLines() {
+    var lines = document.querySelectorAll('line[id^="actor"]');
+    for (var i = 0; i < lines.length; i++) {
+      lines[i].setAttribute('stroke', '#000000');
+      lines[i].setAttribute('stroke-width', '0.5px');
+    }
+  }
+
+  // Run after page fully loads
+  if (document.readyState === 'complete') {
+    setTimeout(fixActorLines, 500);
+    setTimeout(fixActorLines, 1500);
+  } else {
+    window.addEventListener('load', function() {
+      setTimeout(fixActorLines, 500);
+      setTimeout(fixActorLines, 1500);
+      setTimeout(fixActorLines, 3000);
+    });
+  }
+})();
+</script>
