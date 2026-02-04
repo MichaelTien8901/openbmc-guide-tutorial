@@ -213,7 +213,7 @@ stateDiagram-v2
 | `ExpireAction` | What to do on timeout (None, HardReset, PowerOff, etc.) |
 | `CurrentTimerUse` | BIOS_FRB2, BIOS_POST, OS_LOAD, SMS_OS, OEM |
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

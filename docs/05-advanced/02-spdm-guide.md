@@ -105,7 +105,7 @@ flowchart TB
     mctp --> responders
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

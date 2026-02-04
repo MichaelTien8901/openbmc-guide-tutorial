@@ -57,7 +57,7 @@ flowchart TB
     BMC -->|"Network: IPMI, Redfish, SSH"| DCIM["Data Center Management"]
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -168,7 +168,7 @@ flowchart TB
     kernel --> hardware
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -233,7 +233,7 @@ flowchart LR
     end
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

@@ -46,7 +46,7 @@ flowchart TB
     pid --> fans["Fan PWM Outputs<br/>(Fan0, Fan1, Fan2, Fan3, ...)"]
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

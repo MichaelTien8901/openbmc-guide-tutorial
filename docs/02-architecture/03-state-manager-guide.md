@@ -47,7 +47,7 @@ flowchart TB
     dbus <--> obmcutil["obmcutil<br/>(CLI interface)"]
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -439,7 +439,7 @@ flowchart LR
     host -->|"CPU boot sequence"| os["OS Running"]
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -466,7 +466,7 @@ flowchart LR
     host -->|"Host off detected"| chassis["Chassis Off"]
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -673,7 +673,7 @@ stateDiagram-v2
 - `TransitioningToRunning` - boot in progress
 - `TransitioningToQuiesced` - error handling
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (click to expand)</summary>
 
 ```

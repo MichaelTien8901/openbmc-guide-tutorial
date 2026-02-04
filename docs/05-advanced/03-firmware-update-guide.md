@@ -81,7 +81,7 @@ flowchart TB
     style row2 fill:none,stroke:none
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -689,7 +689,7 @@ sequenceDiagram
     BMC->>Host: ActivateFirmwareResp
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -842,7 +842,7 @@ flowchart TB
     style images fill:none,stroke:none
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -1003,7 +1003,7 @@ flowchart TB
     step5 --> step6
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -1117,7 +1117,7 @@ flowchart TB
     attempt1 --> attempt2 --> attempt3 --> attempt4 --> cont
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -1216,7 +1216,7 @@ flowchart LR
     buildserver -->|"Transfer"| bmctarget
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -1375,7 +1375,7 @@ flowchart TB
     step7 -->|No| reject2
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -1647,7 +1647,7 @@ flowchart TB
     upload --> extract --> verify --> ready --> activating --> active --> postverify
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -2173,7 +2173,7 @@ flowchart TB
     hw --> uboot --> kernel --> userspace
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -2407,7 +2407,7 @@ Advanced implementation details for firmware update developers.
   /dev/mtd3 = rofs            
   /dev/mtd4 = rwfs           
 ```  
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

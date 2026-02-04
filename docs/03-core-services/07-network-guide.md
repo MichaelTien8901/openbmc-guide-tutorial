@@ -51,7 +51,7 @@ flowchart TB
     apis --> networkd --> systemd
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -536,7 +536,7 @@ flowchart TB
     config -.- files
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -610,7 +610,7 @@ sequenceDiagram
 - Option 15: Domain Name
 - Option 42: NTP Servers
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -686,7 +686,7 @@ busctl call xyz.openbmc_project.Network \
     VLAN sq "eth0.100" 100
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -761,7 +761,7 @@ flowchart TB
 - `Speed` → `SpeedMbps`
 - `AutoNeg` → `AutoNeg`
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

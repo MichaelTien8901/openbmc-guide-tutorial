@@ -67,7 +67,7 @@ flowchart TB
     bmc --> cpu
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -162,7 +162,7 @@ flowchart LR
     host -->|"TCP:5123"| bmc
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -403,7 +403,7 @@ flowchart TB
     peci --> json
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

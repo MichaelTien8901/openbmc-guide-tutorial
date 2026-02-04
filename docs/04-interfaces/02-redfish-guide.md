@@ -53,7 +53,7 @@ flowchart TB
     bmcweb --> dbus["D-Bus<br/>(phosphor-* services, inventory, sensors)"]
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

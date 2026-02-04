@@ -78,7 +78,7 @@ flowchart TB
     style row2 fill:none,stroke:none
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -238,7 +238,7 @@ flowchart LR
     packages --> image
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (click to expand)</summary>
 
 ```
@@ -329,7 +329,7 @@ flowchart TB
     end
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (click to expand)</summary>
 
 ```

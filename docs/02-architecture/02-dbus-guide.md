@@ -53,7 +53,7 @@ flowchart TB
     daemon <--> C
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -439,7 +439,7 @@ flowchart LR
     inventory -->|"inventory"| sensor
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (click to expand)</summary>
 
 ```

@@ -61,7 +61,7 @@ flowchart TB
     end
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -152,7 +152,7 @@ flowchart TB
     toolchain --> base
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -389,7 +389,8 @@ flowchart LR
 
     bl1 --> bl2
     bl2 --> bl31
-    bl31 --> bl32
+    bl31 -.-> bl32
+    bl32 -.-> bl33
     bl31 --> bl33
     bl33 --> linux
 ```
@@ -401,7 +402,7 @@ flowchart LR
 - **BL32** - Secure Payload (OP-TEE, optional)
 - **BL33** - Non-secure Bootloader (U-Boot)
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

@@ -68,7 +68,7 @@ flowchart TB
     end
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (click to expand)</summary>
 
 ```
@@ -511,7 +511,7 @@ flowchart TB
     options["Compression Options:<br/>• JPEG (quality 10-100)<br/>• Raw (high bandwidth)<br/>• Tight encoding with zlib"]
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (click to expand)</summary>
 
 ```
@@ -618,7 +618,7 @@ sequenceDiagram
 - Bits 5-7: compression type (0x09 = JPEG, 0x00-0x07 = Basic)
 - JPEG Quality: pseudo-encoding -23 to -32 sets quality 0-9 (maps to 5-95%)
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (click to expand)</summary>
 
 ```
@@ -851,7 +851,7 @@ void handleKvmWebSocket(crow::websocket::Connection& conn) {
 }
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (click to expand)</summary>
 
 ```

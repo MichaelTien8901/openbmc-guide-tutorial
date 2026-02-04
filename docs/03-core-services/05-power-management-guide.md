@@ -62,7 +62,7 @@ flowchart TB
     sequencer --> gpio
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

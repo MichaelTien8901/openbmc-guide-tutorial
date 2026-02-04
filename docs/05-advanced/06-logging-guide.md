@@ -62,7 +62,7 @@ flowchart TB
     sources --> logging
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -628,7 +628,7 @@ flowchart TB
     logmgr --> journald
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -699,7 +699,7 @@ flowchart TB
 ]
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

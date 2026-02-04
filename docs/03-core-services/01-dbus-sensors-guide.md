@@ -44,7 +44,7 @@ flowchart TB
     em --> kernel["Linux Kernel<br/>/sys/class/hwmon, /sys/bus/iio"]
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

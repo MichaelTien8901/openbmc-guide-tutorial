@@ -74,7 +74,7 @@ flowchart TB
     end
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
@@ -599,7 +599,7 @@ flowchart TB
     mctpd_layer --> kernel_layer
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

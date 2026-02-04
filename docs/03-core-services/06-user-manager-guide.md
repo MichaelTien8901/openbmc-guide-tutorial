@@ -52,7 +52,7 @@ flowchart TB
     usermgr --> pam["PAM<br/>(Pluggable Authentication Modules)"]
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

@@ -61,7 +61,7 @@ flowchart TB
     end
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (click to expand)</summary>
 
 ```
@@ -602,7 +602,7 @@ sequenceDiagram
 
 Data payload follows for READ responses.
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (click to expand)</summary>
 
 ```
@@ -784,7 +784,7 @@ flowchart TB
 - **LRU cache eviction**: Limited BMC memory (e.g., 64MB cache). Evict least recently used chunks when full.
 - **Sparse image support**: Only fetch blocks actually read by host. Zero-fill unread blocks (improves mount speed).
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (click to expand)</summary>
 
 ```

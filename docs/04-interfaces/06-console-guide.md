@@ -54,7 +54,7 @@ flowchart TB
     clients --> bmcweb --> console --> serial --> host
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

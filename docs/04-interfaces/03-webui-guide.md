@@ -48,7 +48,7 @@ flowchart TB
     browser -->|"HTTPS/443"| bmcweb --> dbus
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```

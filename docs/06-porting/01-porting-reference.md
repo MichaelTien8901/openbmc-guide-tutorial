@@ -57,7 +57,7 @@ flowchart TB
     baselayers --> buildsys
 ```
 
-<details>
+<details markdown="1">
 <summary>ASCII-art version (for comparison)</summary>
 
 ```
