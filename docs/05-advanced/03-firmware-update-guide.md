@@ -29,6 +29,61 @@ OpenBMC supports firmware updates for BMC, BIOS/UEFI, and other platform compone
 
 ### Update Architecture
 
+```mermaid
+---
+title: Firmware Update Architecture
+---
+flowchart TB
+    subgraph interfaces["Update Interfaces"]
+        direction TB
+        redfish["Redfish<br/>UpdateSvc"]
+        ipmi["IPMI<br/>OEM Flash"]
+        pldm["PLDM<br/>FW Update"]
+        webui["WebUI<br/>Upload"]
+        usb["USB<br/>Storage"]
+    end
+
+    subgraph codemgmt["phosphor-bmc-code-mgmt (Software Manager)"]
+        direction LR
+        subgraph row1[" "]
+            direction TB
+            item["ItemUpdater<br/>(BMC/Host/PSU)"]
+            image["ImageManager<br/>(tar extract)"]
+            activation["Activation<br/>(flash ops)"]
+            version["Version<br/>(D-Bus)"]
+        end
+        subgraph row2[" "]
+            direction TB
+            sig["Signature<br/>Verification"]
+            manifest["MANIFEST<br/>Parsing"]
+            priority["Priority<br/>Management"]
+        end
+    end
+
+    subgraph flash["Flash Storage Layer"]
+        direction LR
+        subgraph bmcflash["BMC Flash (SPI)"]
+            direction TB
+            ubi["UBI<br/>Volumes"]
+            static["Static<br/>MTD"]
+        end
+        subgraph hostflash["Host Flash (LPC/SPI)"]
+            direction TB
+            pnor["PNOR"]
+            bios["BIOS"]
+        end
+    end
+
+    interfaces --> codemgmt
+    codemgmt --> flash
+
+    style row1 fill:none,stroke:none
+    style row2 fill:none,stroke:none
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                      Firmware Update Architecture                            │
@@ -73,6 +128,8 @@ OpenBMC supports firmware updates for BMC, BIOS/UEFI, and other platform compone
 │  └───────────────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Key Components
 
@@ -591,6 +648,50 @@ pldmtool fw_update UpdateComponent -m <eid> \
 
 #### PLDM Update Flow
 
+```mermaid
+---
+title: PLDM Update Flow
+---
+sequenceDiagram
+    participant BMC as BMC (pldmd)
+    participant Host as Update Agent (Host)
+
+    Host->>BMC: QueryDeviceIdentifiers
+    BMC->>Host: DeviceIdentifiers
+
+    Host->>BMC: GetFirmwareParameters
+    BMC->>Host: FirmwareParameters
+
+    Host->>BMC: RequestUpdate
+    BMC->>Host: RequestUpdateResp (ACK)
+
+    Host->>BMC: PassComponentTable
+    BMC->>Host: PassComponentTableResp
+
+    Host->>BMC: UpdateComponent
+    BMC->>Host: UpdateComponentResp
+
+    loop Data Transfer
+        BMC->>Host: RequestFirmwareData
+        Host->>BMC: FirmwareData
+    end
+
+    BMC->>Host: TransferComplete
+    Host->>BMC: TransferCompleteResp
+
+    BMC->>Host: VerifyComplete
+    Host->>BMC: VerifyCompleteResp
+
+    BMC->>Host: ApplyComplete
+    Host->>BMC: ApplyCompleteResp
+
+    Host->>BMC: ActivateFirmware
+    BMC->>Host: ActivateFirmwareResp
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌────────────┐                    ┌────────────────┐
 │    BMC     │                    │  Update Agent  │
@@ -647,6 +748,8 @@ pldmtool fw_update UpdateComponent -m <eid> \
       │      ActivateFirmwareResp         │
       │──────────────────────────────────>│
 ```
+
+</details>
 
 ### WebUI Update
 
@@ -708,6 +811,40 @@ OpenBMC implements A/B redundant boot for high availability.
 
 ### Dual Image Architecture
 
+```mermaid
+---
+title: Dual Image Architecture - BMC SPI Flash
+---
+flowchart TB
+    subgraph shared["Shared"]
+        direction LR
+        uboot["U-Boot<br/>(shared)"]
+        ubootenv["U-Boot Env<br/>(shared)"]
+        rwfs["Persistent Data<br/>(rwfs)"]
+    end
+
+    subgraph images[" "]
+        direction LR
+        subgraph imageA["Image A (Active)"]
+            kernelA["kernel-a<br/>(FIT image)"]
+            rofsA["rofs-a<br/>(SquashFS)"]
+            versionA["Version: 2.12.0<br/>Priority: 0 (boot)"]
+        end
+        subgraph imageB["Image B (Standby)"]
+            kernelB["kernel-b<br/>(FIT image)"]
+            rofsB["rofs-b<br/>(SquashFS)"]
+            versionB["Version: 2.11.0<br/>Priority: 1 (standby)"]
+        end
+    end
+
+    shared --- images
+
+    style images fill:none,stroke:none
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           BMC SPI Flash                                     │
@@ -742,6 +879,8 @@ OpenBMC implements A/B redundant boot for high availability.
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### View Images via Redfish
 
@@ -842,6 +981,31 @@ fw_printenv rofsname
 
 ### U-Boot Boot Logic
 
+```mermaid
+---
+title: U-Boot Boot Flow
+---
+flowchart TB
+    step1["1. Read bootside (a or b)"]
+    step2["2. Increment bootcount"]
+    step3{"3. bootcount > bootlimit?"}
+    switch["Switch bootside<br/>Reset bootcount<br/>Retry boot"]
+    step4["4. Load kernel from bootside"]
+    step5["5. Boot Linux"]
+    step6["6. User-space resets bootcount to 0<br/>(via init script or systemd service)"]
+
+    step1 --> step2
+    step2 --> step3
+    step3 -->|Yes| switch
+    switch --> step1
+    step3 -->|No| step4
+    step4 --> step5
+    step5 --> step6
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌───────────────────────────────────────────────────────────────┐
 │                    U-Boot Boot Flow                           │
@@ -869,6 +1033,8 @@ fw_printenv rofsname
 │                                                               │
 └───────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Manual Boot Control
 
@@ -917,6 +1083,43 @@ bootside=a
 
 ### Automatic Boot Fallback
 
+```mermaid
+---
+title: Boot Failure Recovery
+---
+flowchart TB
+    subgraph attempt1["Boot Attempt 1 (Image A)"]
+        direction LR
+        a1s["Success → bootcount = 0, run normally"]
+        a1f["Fail → bootcount++"]
+    end
+
+    subgraph attempt2["Boot Attempt 2 (Image A)"]
+        direction LR
+        a2s["Success → bootcount = 0"]
+        a2f["Fail → bootcount++ (now 2)"]
+    end
+
+    subgraph attempt3["Boot Attempt 3 (Image A)"]
+        direction LR
+        a3s["Success → bootcount = 0"]
+        a3f["Fail → bootcount++ (now 3)<br/>Switch bootside to B<br/>Reset bootcount to 0"]
+    end
+
+    subgraph attempt4["Boot Attempt 4 (Image B)"]
+        direction LR
+        a4s["Success → bootcount = 0, run from backup"]
+        a4f["Fail → bootcount++"]
+    end
+
+    cont["... continues alternating ..."]
+
+    attempt1 --> attempt2 --> attempt3 --> attempt4 --> cont
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                  Boot Failure Recovery                         │
@@ -944,6 +1147,8 @@ bootside=a
 │                                                                │
 └────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Boot Health Check Service
 
@@ -989,6 +1194,31 @@ reboot
 
 ### Signing Infrastructure Overview
 
+```mermaid
+---
+title: Firmware Signing Infrastructure
+---
+flowchart LR
+    subgraph buildserver["Build Server"]
+        privkey["Private Key<br/>(kept secure)"]
+        sign["Sign Components<br/>- MANIFEST<br/>- image-kernel<br/>- image-rofs<br/>- image-u-boot"]
+        tarball["Create Tarball<br/>with signatures"]
+        privkey --> sign --> tarball
+    end
+
+    subgraph bmctarget["BMC Target"]
+        pubkey["Public Key<br/>(/etc/activation data/)"]
+        verify["Verify Signatures<br/>- Compare hashes<br/>- Validate chain<br/>- Check key type"]
+        decision["Accept/Reject<br/>Update"]
+        pubkey --> verify --> decision
+    end
+
+    buildserver -->|"Transfer"| bmctarget
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                    Firmware Signing Infrastructure                        │
@@ -1021,6 +1251,8 @@ reboot
 │                                                                           │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Generate Signing Keys
 
@@ -1119,6 +1351,33 @@ RPROVIDES:${PN} = "virtual/phosphor-software-manager-system-public-key"
 
 ### Verification Flow
 
+```mermaid
+---
+title: Signature Verification Flow
+---
+flowchart TB
+    step1["1. Upload firmware tarball"]
+    step2["2. Extract to /tmp/images/random-id/"]
+    step3["3. Parse MANIFEST<br/>- Read KeyType → OpenBMC<br/>- Read HashType → RSA-SHA256<br/>- Validate MachineName"]
+    step4{"4. Load public key from<br/>/etc/activationdata/key-KeyType"}
+    reject1["REJECT<br/>(unless verify-signature=disabled)"]
+    step5["5. Verify MANIFEST signature<br/>openssl dgst -sha256 -verify"]
+    step6["6. Verify each component signature<br/>- image-kernel<br/>- image-rofs<br/>- image-rwfs<br/>- image-u-boot"]
+    step7{"7. All signatures valid?"}
+    accept["Proceed with activation"]
+    reject2["REJECT, log error,<br/>delete extracted files"]
+
+    step1 --> step2 --> step3 --> step4
+    step4 -->|Key not found| reject1
+    step4 -->|Key found| step5
+    step5 --> step6 --> step7
+    step7 -->|Yes| accept
+    step7 -->|No| reject2
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                   Signature Verification Flow                            │
@@ -1157,6 +1416,8 @@ RPROVIDES:${PN} = "virtual/phosphor-software-manager-system-public-key"
 │                                                                          │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Manual Signature Verification
 
@@ -1333,6 +1594,62 @@ pldmtool fw_update GetFwParams -m <eid>
 
 ### Complete Update Sequence
 
+```mermaid
+---
+title: Firmware Update Workflow
+---
+flowchart TB
+    subgraph upload["1. UPLOAD"]
+        u1["Receive via Redfish/IPMI/PLDM"]
+        u2["Store in /tmp/images/random-id/"]
+        u3["Create Software.Version D-Bus object"]
+    end
+
+    subgraph extract["2. EXTRACT & PARSE"]
+        e1["Extract tarball contents"]
+        e2["Parse MANIFEST file"]
+        e3["Validate MachineName"]
+        e4["Check version purpose"]
+    end
+
+    subgraph verify["3. VERIFY (if enabled)"]
+        v1["Load public key"]
+        v2["Verify MANIFEST signature"]
+        v3["Verify component signatures"]
+        v4["REJECT if any fails"]
+    end
+
+    subgraph ready["4. READY"]
+        r1["Set Activation = Ready"]
+        r2["Create RedundancyPriority"]
+        r3["Wait for activation"]
+    end
+
+    subgraph activating["5. ACTIVATING"]
+        a1["Set Activation = Activating"]
+        a2["Erase standby partition"]
+        a3["Write images to flash"]
+        a4["Update U-Boot variables"]
+    end
+
+    subgraph active["6. ACTIVE"]
+        ac1["Set Activation = Active"]
+        ac2["Set Priority = 0"]
+        ac3["Optional: trigger reboot"]
+    end
+
+    subgraph postverify["7. VERIFY (post-reboot)"]
+        p1["Boot new image"]
+        p2["Reset bootcount to 0"]
+        p3["Log successful update"]
+    end
+
+    upload --> extract --> verify --> ready --> activating --> active --> postverify
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        Firmware Update Workflow                             │
@@ -1382,6 +1699,8 @@ pldmtool fw_update GetFwParams -m <eid>
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Activation States
 
@@ -1841,6 +2160,22 @@ reboot
 
 ### Secure Boot Chain
 
+```mermaid
+---
+title: Secure Boot Chain
+---
+flowchart TB
+    hw["1. Hardware Root of Trust<br/>SoC verifies U-Boot signature using OTP-fused key"]
+    uboot["2. U-Boot (Verified Boot)<br/>Verifies FIT image signature (kernel + DTB + initramfs)"]
+    kernel["3. Linux Kernel<br/>dm-verity protects read-only rootfs"]
+    userspace["4. User Space<br/>phosphor-software-manager verifies update signatures"]
+
+    hw --> uboot --> kernel --> userspace
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                        Secure Boot Chain                                   │
@@ -1860,6 +2195,8 @@ reboot
 │                                                                            │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### U-Boot Verified Boot Configuration
 
@@ -2042,6 +2379,37 @@ Advanced implementation details for firmware update developers.
 
 ### Flash Layout and MTD Partitions
 
+* Typical BMC Flash Layout (32MB)   
+
+| Offset    | Size  | Partition  | Description            |
+|-----------|-------|------------|------------------------|
+| 0x0000000 | 512KB | u-boot     | Bootloader             |
+| 0x0080000 | 128KB | u-boot-env | U-Boot environment     |
+| 0x00A0000 | 4.5MB | kernel     | FIT image (kernel+dtb) |
+| 0x0520000 | 25MB  | rofs       | Read-only rootfs       |
+| 0x1DC0000 | 2MB   | rwfs       | Persistent read-write  |
+
+*   Dual-Flash Configuration (A/B):   
+
+| Flash 0 (Current) | Flash 1 (Alternate) |
+|-------------------|---------------------|
+| u-boot (shared)   | (reserved)          |
+| u-boot-env        |                     |
+| kernel-a (active) | kernel-b            |
+| rofs-a (active)   | rofs-b              |
+| rwfs (shared)     |                     |
+
+*   Linux MTD Devices:  
+```
+  /dev/mtd0 = u-boot          
+  /dev/mtd1 = u-boot-env      
+  /dev/mtd2 = kernel          
+  /dev/mtd3 = rofs            
+  /dev/mtd4 = rwfs           
+```  
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    Typical BMC Flash Layout (32MB)                      │
@@ -2080,6 +2448,8 @@ Advanced implementation details for firmware update developers.
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Update Image Verification
 

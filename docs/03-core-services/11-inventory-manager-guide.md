@@ -27,6 +27,38 @@ Manage FRU data and hardware inventory on OpenBMC.
 
 **phosphor-inventory-manager** tracks hardware components, FRU (Field Replaceable Unit) data, and component associations.
 
+```mermaid
+---
+title: Inventory Manager Architecture
+---
+flowchart TB
+    subgraph sources["Data Sources"]
+        direction LR
+        fru["FRU EEPROMs<br/>(I2C devices)"]
+        em["Entity Manager<br/>(JSON configurations)"]
+    end
+
+    subgraph invmgr["phosphor-inventory-manager"]
+        direction LR
+        tree["Inventory Tree<br/>/xyz/openbmc_project/<br/>inventory/system/"]
+        assoc["Associations<br/>(links items)"]
+        parser["FRU Parser<br/>(IPMI FRU)"]
+    end
+
+    subgraph interfaces["Access Interfaces"]
+        direction LR
+        redfish["Redfish<br/>/Chassis/"]
+        ipmi["IPMI<br/>fru print"]
+        dbus["D-Bus<br/>busctl"]
+    end
+
+    sources --> invmgr
+    invmgr --> interfaces
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +-------------------------------------------------------------------+
 |                  Inventory Manager Architecture                   |
@@ -60,6 +92,8 @@ Manage FRU data and hardware inventory on OpenBMC.
 |                                                                   |
 +-------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 

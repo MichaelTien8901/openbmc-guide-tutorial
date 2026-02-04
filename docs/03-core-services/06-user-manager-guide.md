@@ -27,6 +27,34 @@ Configure user accounts, privileges, and LDAP authentication on OpenBMC.
 
 OpenBMC user management is handled by **phosphor-user-manager**, providing local accounts, role-based access control, and LDAP integration.
 
+```mermaid
+---
+title: User Manager Architecture
+---
+flowchart TB
+    subgraph access["Access Methods"]
+        direction LR
+        redfish["Redfish API"]
+        ipmi["IPMI Users"]
+        ssh["SSH Login"]
+        webui["WebUI Login"]
+    end
+
+    access --> usermgr
+
+    subgraph usermgr["phosphor-user-manager"]
+        direction LR
+        local["Local Accounts<br/>/etc/passwd"]
+        ldap["LDAP/AD Config<br/>nslcd/sssd"]
+        priv["Privilege<br/>Management"]
+    end
+
+    usermgr --> pam["PAM<br/>(Pluggable Authentication Modules)"]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                   User Manager Architecture                     │
@@ -57,6 +85,8 @@ OpenBMC user management is handled by **phosphor-user-manager**, providing local
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

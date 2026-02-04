@@ -27,6 +27,42 @@ Configure and control LEDs on OpenBMC.
 
 **phosphor-led-manager** provides LED control and group management, supporting identify, fault, and status LEDs through D-Bus interfaces.
 
+```mermaid
+---
+title: LED Architecture
+---
+flowchart TB
+    subgraph access["Access Methods"]
+        direction LR
+        redfish["Redfish<br/>Indicator"]
+        ipmi["IPMI<br/>Identify"]
+        dbus["D-Bus<br/>busctl"]
+        button["Physical<br/>Button"]
+    end
+
+    subgraph manager["phosphor-led-manager"]
+        direction LR
+        groups["LED Groups<br/>(logical)"]
+        actions["LED Actions<br/>(on/off/blink)"]
+        lamptest["Lamp Test<br/>(all LEDs)"]
+    end
+
+    subgraph sysfs["phosphor-led-sysfs"]
+        interface["Linux LED sysfs interface"]
+    end
+
+    subgraph physical["Physical LEDs"]
+        leds["/sys/class/leds/*<br/>(power, identify, fault, etc.)"]
+    end
+
+    access --> manager
+    manager --> sysfs
+    sysfs --> physical
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     LED Architecture                            │
@@ -62,6 +98,8 @@ Configure and control LEDs on OpenBMC.
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

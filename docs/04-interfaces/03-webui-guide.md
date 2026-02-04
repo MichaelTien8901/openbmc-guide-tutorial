@@ -26,6 +26,31 @@ Configure and customize the OpenBMC web interface.
 
 **webui-vue** is the modern, Vue.js-based web interface for OpenBMC. It provides a browser-based management console that communicates with the BMC through the Redfish API.
 
+```mermaid
+---
+title: WebUI Architecture
+---
+flowchart TB
+    subgraph browser["Web Browser"]
+        subgraph webui["webui-vue"]
+            direction LR
+            vue["Vue 2<br/>Router"]
+            vuex["Vuex<br/>Store"]
+            bootstrap["Bootstrap<br/>Vue"]
+            axios["Axios<br/>Client"]
+        end
+    end
+
+    bmcweb["bmcweb<br/>(Serves static files + Redfish API)"]
+
+    dbus["D-Bus<br/>(phosphor-* services, state, sensors)"]
+
+    browser -->|"HTTPS/443"| bmcweb --> dbus
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                       WebUI Architecture                        │
@@ -57,6 +82,8 @@ Configure and customize the OpenBMC web interface.
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

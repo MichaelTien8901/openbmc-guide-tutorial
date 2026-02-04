@@ -30,6 +30,46 @@ The Linux **hwmon** (Hardware Monitoring) subsystem provides a standardized inte
 1. **phosphor-hwmon** - Legacy daemon that reads hwmon sysfs and exposes D-Bus sensors
 2. **dbus-sensors** - Modern approach with specialized sensor daemons
 
+```mermaid
+---
+title: Hwmon Architecture
+---
+flowchart TB
+    subgraph consumers["D-Bus Consumers"]
+        direction LR
+        bmcweb["bmcweb"]
+        ipmid["ipmid"]
+        fanctrl["fan-control"]
+    end
+
+    subgraph dbus["D-Bus Layer"]
+        sensorval["xyz.openbmc_project.Sensor.Value"]
+    end
+
+    subgraph daemons["Sensor Daemons"]
+        direction LR
+        phosphor["phosphor-hwmon<br/>(legacy)"]
+        hwmontemp["dbus-sensors<br/>hwmontemp"]
+        fansensor["dbus-sensors<br/>fansensor"]
+    end
+
+    subgraph sysfs["Linux hwmon sysfs"]
+        hwmon["/sys/class/hwmon/hwmonN/"]
+    end
+
+    subgraph kernel["Kernel Drivers"]
+        drivers["lm75, tmp75, pmbus, aspeed-adc, ..."]
+    end
+
+    consumers --> dbus
+    dbus --> daemons
+    daemons --> sysfs
+    sysfs --> kernel
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Hwmon Architecture                          │
@@ -66,6 +106,8 @@ The Linux **hwmon** (Hardware Monitoring) subsystem provides a standardized inte
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

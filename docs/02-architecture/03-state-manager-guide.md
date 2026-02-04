@@ -31,6 +31,25 @@ The **phosphor-state-manager** controls the power state of the BMC, chassis, and
 - Tracking system state
 - Implementing power restore policies
 
+```mermaid
+---
+title: State Manager Architecture
+---
+flowchart TB
+    subgraph managers["State Managers"]
+        direction LR
+        bmc["BMC State Manager<br/>States: NotReady, Ready,<br/>Quiesced, UpdateInProg"]
+        chassis["Chassis State Manager<br/>States: Off, On"]
+        host["Host State Manager <br/>States: Off, Running,<br/>Quiesced, DiagMode"]
+    end
+
+    managers <--> dbus["D-Bus"]
+    dbus <--> obmcutil["obmcutil<br/>(CLI interface)"]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     State Manager Architecture                  │
@@ -59,6 +78,8 @@ The **phosphor-state-manager** controls the power state of the BMC, chassis, and
 │                     └───────────────────────┘                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 
@@ -408,6 +429,19 @@ obmcutil --help
 
 ### Power On Sequence
 
+```mermaid
+---
+title: Power On Sequence
+---
+flowchart LR
+    bmc["BMC Ready"] -->|"obmcutil poweron"| chassis["Chassis On"]
+    chassis -->|"Power rails enabled"| host["Host Running"]
+    host -->|"CPU boot sequence"| os["OS Running"]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐
 │  BMC    │     │ Chassis │     │  Host   │     │   OS    │
@@ -419,7 +453,21 @@ obmcutil --help
      ▼               ▼               ▼               ▼
 ```
 
+</details>
+
 ### Power Off Sequence
+
+```mermaid
+---
+title: Power Off Sequence
+---
+flowchart LR
+    os["OS Shutdown"] -->|"ACPI/IPMI shutdown"| host["Host Off"]
+    host -->|"Host off detected"| chassis["Chassis Off"]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
 
 ```
 ┌─────────┐     ┌─────────┐     ┌─────────┐
@@ -431,6 +479,8 @@ obmcutil --help
      │  shutdown     │   detected    │  disabled
      ▼               ▼               ▼
 ```
+
+</details>
 
 ---
 
@@ -599,6 +649,33 @@ Advanced implementation details for state manager developers.
 
 The state managers implement finite state machines with well-defined transitions:
 
+```mermaid
+---
+title: Host State Machine
+---
+stateDiagram-v2
+    [*] --> Off
+    Off --> Running : Transition.On
+    Running --> Off : Transition.Off
+    Off --> Quiesced : error
+    Running --> Quiesced : error
+    Quiesced --> Off : recover
+
+    state "Transition States" as trans {
+        TransitioningToOff
+        TransitioningToRunning
+        TransitioningToQuiesced
+    }
+```
+
+**Internal Transition States:**
+- `TransitioningToOff` - shutdown in progress
+- `TransitioningToRunning` - boot in progress
+- `TransitioningToQuiesced` - error handling
+
+<details>
+<summary>ASCII-art version (click to expand)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    Host State Machine                                   │
@@ -628,6 +705,8 @@ The state managers implement finite state machines with well-defined transitions
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 **State transition triggers:**
 

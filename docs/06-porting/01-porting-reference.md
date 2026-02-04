@@ -30,6 +30,36 @@ Porting OpenBMC to a new platform involves creating a machine layer, configuring
 {: .note }
 **ARM Server Platforms**: For ARM-based servers (NVIDIA Grace, Ampere, etc.), see the [ARM Platform Guide]({% link docs/06-porting/06-arm-platform-guide.md %}) which covers ARM-specific boot flow, meta-arm integration, and NVIDIA OpenBMC as a reference.
 
+```mermaid
+---
+title: Porting Architecture
+---
+flowchart TB
+    subgraph yourlayer["Your Machine Layer (meta-myplatform)"]
+        direction LR
+        machineconf["conf/machine/<br/>myboard.conf"]
+        recipes["recipes-*<br/>(customization)"]
+        layerconf["conf/layer.conf<br/>(layer metadata)"]
+    end
+
+    subgraph baselayers["OpenBMC Base Layers"]
+        direction LR
+        phosphor["meta-phosphor<br/>(services)"]
+        aspeed["meta-aspeed<br/>(BMC SoC)"]
+        oe["meta-openembedded<br/>(base packages)"]
+    end
+
+    subgraph buildsys["BitBake Build System"]
+        bitbake["openbmc-env, bitbake"]
+    end
+
+    yourlayer --> baselayers
+    baselayers --> buildsys
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Porting Architecture                         │
@@ -60,6 +90,8 @@ Porting OpenBMC to a new platform involves creating a machine layer, configuring
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

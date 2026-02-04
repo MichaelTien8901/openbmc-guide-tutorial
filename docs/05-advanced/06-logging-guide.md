@@ -27,6 +27,44 @@ Configure and use event logging in OpenBMC.
 
 OpenBMC provides comprehensive logging capabilities through **phosphor-logging** and related services. Logs are accessible via D-Bus, IPMI SEL, and Redfish APIs.
 
+```mermaid
+---
+title: Logging Architecture
+---
+flowchart TB
+    subgraph interfaces["Access Interfaces"]
+        direction LR
+        redfish["Redfish<br/>EventLog"]
+        ipmi["IPMI<br/>SEL"]
+        dbus["D-Bus<br/>busctl"]
+        journal["journald<br/>logs"]
+    end
+
+    subgraph logging["phosphor-logging"]
+        direction LR
+        logmgr["Log Manager<br/>(D-Bus API)"]
+        create["Error Creation<br/>& Storage"]
+        resolve["Resolving<br/>& Cleanup"]
+    end
+
+    storage["/var/lib/phosphor-logging/errors/"]
+
+    subgraph sources["Event Sources"]
+        direction LR
+        sensors["Sensors<br/>(thresh)"]
+        state["State Mgr<br/>(power)"]
+        firmware["Firmware<br/>(update)"]
+        services["Services<br/>(errors)"]
+    end
+
+    interfaces --> logging
+    logging --> storage
+    sources --> logging
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Logging Architecture                         │
@@ -66,6 +104,8 @@ OpenBMC provides comprehensive logging capabilities through **phosphor-logging**
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 
@@ -558,6 +598,39 @@ Advanced implementation details for logging developers.
 
 ### phosphor-logging Architecture
 
+```mermaid
+---
+title: phosphor-logging Architecture
+---
+flowchart TB
+    subgraph apps["Application Layer"]
+        direction LR
+        svcA["Service A"]
+        svcB["Service B"]
+        svcC["Service C"]
+        svcD["Service D"]
+    end
+
+    report["phosphor::logging::report<>()"]
+
+    subgraph logmgr["phosphor-log-manager<br/>xyz.openbmc_project.Logging"]
+        entries["/xyz/openbmc_project/logging<br/>├── entry/1<br/>├── entry/2<br/>└── entry/N"]
+        storage["Storage: /var/lib/phosphor-logging/errors/"]
+    end
+
+    redfish["Redfish<br/>LogService"]
+    ipmisel["IPMI SEL<br/>Logger"]
+    journald["journald<br/>(syslog)"]
+
+    apps --> report --> logmgr
+    logmgr --> redfish
+    logmgr --> ipmisel
+    logmgr --> journald
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    Logging Architecture                                 │
@@ -596,7 +669,38 @@ Advanced implementation details for logging developers.
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ### Error Entry Structure
+
+**D-Bus Object:** `/xyz/openbmc_project/logging/entry/N`
+
+**Interfaces and Properties:**
+
+| Interface | Property | Description |
+|-----------|----------|-------------|
+| `xyz.openbmc_project.Logging.Entry` | `Id` (uint32) | Entry identifier |
+| | `Severity` | Informational/Warning/Critical |
+| | `Message` (string) | Error message (MessageId) |
+| | `Resolved` (bool) | Has error been acknowledged |
+| | `Timestamp` (uint64) | Unix timestamp in milliseconds |
+| | `AdditionalData` | Array of "KEY=VALUE" strings |
+| `xyz.openbmc_project.Association.Definitions` | `Associations` | Links to related objects |
+| `xyz.openbmc_project.Object.Delete` | `Delete()` | Method to delete entry |
+
+**AdditionalData Example:**
+```json
+[
+  "SENSOR_PATH=/xyz/openbmc_project/sensors/temp/CPU0",
+  "THRESHOLD_VALUE=95.0",
+  "READING=98.5",
+  "_PID=1234",
+  "CALLOUT_INVENTORY_PATH=/xyz/.../cpu0"
+]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -635,6 +739,8 @@ Advanced implementation details for logging developers.
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Error Reporting API
 

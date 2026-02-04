@@ -27,6 +27,35 @@ Configure and extend the Redfish API in OpenBMC.
 
 **Redfish** is a modern, RESTful API standard for server management, replacing IPMI for most use cases. OpenBMC implements Redfish through **bmcweb**, including support for **Redfish Aggregation** to manage multiple BMCs from a single endpoint.
 
+```mermaid
+---
+title: Redfish Architecture
+---
+flowchart TB
+    clients["External Clients<br/>(curl, Redfish clients, WebUI)"]
+
+    clients -->|"HTTPS/443"| bmcweb
+
+    subgraph bmcweb["bmcweb"]
+        direction LR
+        subgraph handlers["Resource Handlers"]
+            direction TB
+            Systems
+            Chassis
+            Managers
+            Account
+            Event
+            OEM
+        end
+        auth["Authentication<br/>(Basic, Session, mTLS)"]
+    end
+
+    bmcweb --> dbus["D-Bus<br/>(phosphor-* services, inventory, sensors)"]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                      Redfish Architecture                        │
@@ -60,6 +89,8 @@ Configure and extend the Redfish API in OpenBMC.
 │  └──────────────────────────────────────────────────────────────┘│
 └──────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

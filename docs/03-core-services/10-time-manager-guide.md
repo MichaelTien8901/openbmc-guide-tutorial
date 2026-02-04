@@ -26,6 +26,37 @@ Configure NTP, RTC, and timezone settings on OpenBMC.
 
 **phosphor-time-manager** handles time synchronization, timezone configuration, and BMC/host time ownership.
 
+```mermaid
+---
+title: Time Manager Architecture
+---
+flowchart TB
+    subgraph sources["Time Sources"]
+        direction LR
+        ntp["NTP Servers<br/>(pool.ntp.org)"]
+        host["Host System<br/>(time source)"]
+    end
+
+    subgraph timemgr["phosphor-time-manager"]
+        direction LR
+        mode["Time Mode<br/>(NTP/Manual)"]
+        owner["Time Owner<br/>(BMC/Host)"]
+        tz["Timezone<br/>Setting"]
+    end
+
+    subgraph backends["Time Backends"]
+        direction LR
+        timesyncd["systemd-timesyncd<br/>(NTP client)"]
+        rtc["RTC<br/>(Hardware Clock)"]
+    end
+
+    sources --> timemgr
+    timemgr --> backends
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +-------------------------------------------------------------------+
 |                   Time Manager Architecture                       |
@@ -57,6 +88,8 @@ Configure NTP, RTC, and timezone settings on OpenBMC.
 |                                                                   |
 +-------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 

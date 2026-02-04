@@ -26,6 +26,61 @@ OpenBMC follows a modular, service-oriented architecture built on Linux.
 
 ### High-Level Architecture
 
+```mermaid
+flowchart TB
+    subgraph external["External Interfaces"]
+        direction TB
+        IPMI["IPMI<br/>(netipmid)"]
+        Redfish["Redfish<br/>(bmcweb)"]
+        WebUI["WebUI<br/>(webui-vue)"]
+        SSH["SSH<br/>(dropbear)"]
+        KVM["KVM<br/>(obmc-ikvm)"]
+    end
+
+    dbus["D-Bus (System Bus - Inter-process Communication)"]
+
+    subgraph services["Phosphor Services"]
+
+        subgraph row1[" "]
+            State["State Manager"]
+            Sensors["Sensors"]
+            Logging["Logging"]
+            Inventory["Inventory"]
+        end
+        subgraph row2[" "]
+            Fan["Fan Control"]
+            Power["Power Control"]
+            User["User Manager"]
+            Network["Network Manager"]
+        end
+    end
+
+    systemd["systemd (Service Management)"]
+
+    subgraph kernel["Linux Kernel"]
+        direction TB
+        hwmon
+        GPIO
+        I2C
+        SPI
+        MTD
+    end
+
+    hardware["BMC Hardware: ASPEED AST2500/AST2600, Nuvoton NPCM7xx"]
+
+    external --> dbus
+    dbus --> services
+    services --> systemd
+    systemd --> kernel
+    kernel --> hardware
+
+    style row1 fill:none,stroke:none
+    style row2 fill:none,stroke:none
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                         External Interfaces                            │
@@ -61,6 +116,8 @@ OpenBMC follows a modular, service-oriented architecture built on Linux.
 │              ASPEED AST2500/AST2600, Nuvoton NPCM7xx                   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Key Architectural Principles
 
@@ -156,6 +213,34 @@ OpenBMC uses [Yocto Project](https://www.yoctoproject.org/) for building.
 
 ### Build Workflow
 
+```mermaid
+---
+title: Build Process
+---
+flowchart LR
+    subgraph sources["Source Code"]
+        recipes["Recipes (.bb)"]
+        machine["Machine Config"]
+    end
+
+    subgraph bitbake["BitBake"]
+        parse["Parse & Build"]
+    end
+
+    subgraph output["Output"]
+        packages["Packages (.ipk)"]
+        image["Image (.mtd)"]
+    end
+
+    recipes --> parse
+    machine --> parse
+    parse --> packages
+    packages --> image
+```
+
+<details>
+<summary>ASCII-art version (click to expand)</summary>
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                         Build Process                            │
@@ -174,6 +259,8 @@ OpenBMC uses [Yocto Project](https://www.yoctoproject.org/) for building.
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Key BitBake Commands
 
@@ -226,6 +313,25 @@ D-Bus is the backbone of OpenBMC communication.
 
 ### D-Bus Concepts
 
+```mermaid
+---
+title: D-Bus System Bus Structure
+---
+flowchart TB
+    subgraph bus["D-Bus System Bus"]
+        subgraph service["Service: xyz.openbmc_project.State.Host"]
+            subgraph object["Object: /xyz/openbmc_project/state/host0"]
+                subgraph iface["Interface: xyz.openbmc_project.State.Host"]
+                    props["Properties: CurrentHostState<br/>Methods: (none)<br/>Signals: PropertiesChanged"]
+                end
+            end
+        end
+    end
+```
+
+<details>
+<summary>ASCII-art version (click to expand)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        D-Bus System Bus                         │
@@ -248,6 +354,8 @@ D-Bus is the backbone of OpenBMC communication.
 │  └────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Common D-Bus Tools
 

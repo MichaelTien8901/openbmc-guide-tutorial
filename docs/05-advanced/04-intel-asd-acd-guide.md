@@ -27,6 +27,49 @@ Configure Intel At-Scale Debug and Autonomous Crash Dump on OpenBMC.
 
 **ASD (At-Scale Debug)** and **ACD (Autonomous Crash Dump)** are Intel technologies for remote CPU debugging and crash analysis on Intel Xeon server platforms.
 
+```mermaid
+---
+title: Intel Debug Architecture
+---
+flowchart TB
+    subgraph client["Debug Client (Host)"]
+        direction TB
+        isd["Intel System<br/>Debugger (ISD)"]
+        itpxdp["ITP-XDP<br/>(In-Target Probe)"]
+        crash["Crash Analyzer<br/>Tool"]
+    end
+
+    subgraph network["Network (TCP/IP)"]
+        ports["Port 5123 (ASD) / HTTPS (Redfish)"]
+    end
+
+    subgraph bmc["BMC"]
+        direction TB
+        asd["ASD<br/>Daemon"]
+        crashdump["Crashdump<br/>Service"]
+        jtag["JTAG Handler<br/>(jtag_handler.c)"]
+        peci["PECI Interface<br/>(Platform Environment Control I/F)"]
+
+        asd --> jtag
+        crashdump --> jtag
+        jtag --> peci
+    end
+
+    subgraph cpu["Intel Xeon CPU(s)"]
+        direction TB
+        xdp["XDP Port<br/>(Debug Port)"]
+        tap["JTAG TAP<br/>Controller"]
+        mca["MCA Banks<br/>(Error Regs)"]
+    end
+
+    client --> network
+    network --> bmc
+    bmc --> cpu
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +------------------------------------------------------------------------+
 |                    Intel Debug Architecture                            |
@@ -77,6 +120,8 @@ Configure Intel At-Scale Debug and Autonomous Crash Dump on OpenBMC.
 +------------------------------------------------------------------------+
 ```
 
+</details>
+
 ---
 
 ## ASD (At-Scale Debug)
@@ -92,6 +137,33 @@ At-Scale Debug provides remote JTAG-like access to Intel CPUs through the BMC, e
 - **Memory access** through the CPU debug interface
 
 ### ASD Architecture
+
+```mermaid
+---
+title: ASD Components
+---
+flowchart LR
+    subgraph host["Debug Host"]
+        direction LR
+        openipc["OpenIPC/ISD"]
+        asdclient["ASD Client"]
+    end
+
+    subgraph bmc["BMC - ASD Daemon"]
+        direction TB
+        msghandler["Message Handler"]
+        jtaghandler["JTAG Handler<br/>- Chain discovery<br/>- TAP state machine<br/>- IR/DR shifting"]
+        targethandler["Target Handler<br/>- XDP interface<br/>- GPIO control"]
+
+        msghandler --> jtaghandler
+        jtaghandler --> targethandler
+    end
+
+    host -->|"TCP:5123"| bmc
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
 
 ```
 +-------------------------------------------------------------------+
@@ -121,6 +193,8 @@ At-Scale Debug provides remote JTAG-like access to Intel CPUs through the BMC, e
 |                                       +------------------------+  |
 +-------------------------------------------------------------------+
 ```
+
+</details>
 
 ### Build Configuration
 
@@ -833,7 +907,7 @@ This section provides detailed technical information for developers who want to 
 │  Message Types (cmd_type):                                                  │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │  Type   │ Name              │ Description                              │ │
-│  │  ───────┼───────────────────┼─────────────────────────────────────────│ │
+│  │  ───────┼───────────────────┼──────────────────────────────────────────│ │
 │  │  0x01   │ AGENT_CONTROL     │ Init, reset, status queries              │ │
 │  │  0x02   │ JTAG_CHAIN        │ JTAG operations (scan, shift)            │ │
 │  │  0x03   │ I2C_MSG           │ I2C read/write transactions              │ │
@@ -894,31 +968,31 @@ This section provides detailed technical information for developers who want to 
 │              │                  │ TMS=0                     │  │            │
 │              │                  v                           │  │            │
 │              │         ┌──────────────────┐                 │  │            │
-│    TMS=1     │   ┌────>│     Shift-DR     │───┐ TMS=0      │  │            │
-│     │        │   │     └────────┬─────────┘   │ (loop)     │  │            │
-│     │        │   │              │ TMS=1       │            │  │            │
-│     │        │   │              v             │            │  │            │
-│     │        │   │     ┌──────────────────┐   │            │  │            │
-│     │        │   │     │     Exit1-DR     │<──┘            │  │            │
-│     │        │   │     └────────┬─────────┘                │  │            │
-│     │        │   │ TMS=0        │ TMS=1                    │  │            │
-│     │        │   │              v                          │  │            │
-│     │        │   │     ┌──────────────────┐                │  │            │
-│     │        │   └─────│     Pause-DR     │                │  │            │
-│     │        │         └────────┬─────────┘                │  │            │
-│     │        │                  │ TMS=1                    │  │            │
-│     │        │                  v                          │  │            │
-│     │        │         ┌──────────────────┐                │  │            │
-│     │        │         │     Exit2-DR     │                │  │            │
-│     │        │         └────────┬─────────┘                │  │            │
-│     │        │                  │ TMS=1                    │  │            │
-│     │        │                  v                          │  │            │
-│     │        │         ┌──────────────────┐                │  │            │
-│     │        └─────────│    Update-DR     │────────────────┘  │            │
-│     │                  └──────────────────┘                   │            │
-│     │                                                         │            │
-│     │                  ┌──────────────────┐                   │            │
-│     └──────────────────│  Select-IR-Scan  │<──────────────────┘            │
+│    TMS=1     │   ┌────>│     Shift-DR     │───┐ TMS=0       │  │            │
+│     │        │   │     └────────┬─────────┘   │ (loop)      │  │            │
+│     │        │   │              │ TMS=1       │             │  │            │
+│     │        │   │              v             │             │  │            │
+│     │        │   │     ┌──────────────────┐   │             │  │            │
+│     │        │   │     │     Exit1-DR     │<──┘             │  │            │
+│     │        │   │     └────────┬─────────┘                 │  │            │
+│     │        │   │ TMS=0        │ TMS=1                     │  │            │
+│     │        │   │              v                           │  │            │
+│     │        │   │     ┌──────────────────┐                 │  │            │
+│     │        │   └─────│     Pause-DR     │                 │  │            │
+│     │        │         └────────┬─────────┘                 │  │            │
+│     │        │                  │ TMS=1                     │  │            │
+│     │        │                  v                           │  │            │
+│     │        │         ┌──────────────────┐                 │  │            │
+│     │        │         │     Exit2-DR     │                 │  │            │
+│     │        │         └────────┬─────────┘                 │  │            │
+│     │        │                  │ TMS=1                     │  │            │
+│     │        │                  v                           │  │            │
+│     │        │         ┌──────────────────┐                 │  │            │
+│     │        └─────────│    Update-DR     │─────────────────┘  │            │
+│     │                  └──────────────────┘                    │            │
+│     │                                                          │            │
+│     │                  ┌──────────────────┐                    │            │
+│     └──────────────────│  Select-IR-Scan  │<───────────────────┘            │
 │                        └────────┬─────────┘                                 │
 │                                 │                                           │
 │                       (IR path mirrors DR path)                             │
@@ -957,14 +1031,14 @@ This section provides detailed technical information for developers who want to 
 │  │     │  Response: Completion code 0x40 = success                   │ │    │
 │  │     └─────────────────────────────────────────────────────────────┘ │    │
 │  │                              │           │                          │    │
-│  │  3. Read CPU ID             │           │                          │    │
+│  │  3. Read CPU ID              │           │                          │    │
 │  │     ┌────────────────────────┴───────────┴────────────────────────┐ │    │
 │  │     │  Command: RdPkgConfig                                       │ │    │
 │  │     │  Index: 0x00 (CPU_ID)                                       │ │    │
 │  │     │  Response: Family/Model/Stepping                            │ │    │
 │  │     └─────────────────────────────────────────────────────────────┘ │    │
 │  │                              │           │                          │    │
-│  │  4. Read MCA Banks          │           │                          │    │
+│  │  4. Read MCA Banks           │           │                          │    │
 │  │     ┌────────────────────────┴───────────┴────────────────────────┐ │    │
 │  │     │  For each MCA bank (0 to N):                                │ │    │
 │  │     │    Command: RdIAMSR                                         │ │    │
@@ -974,14 +1048,14 @@ This section provides detailed technical information for developers who want to 
 │  │     │    MSR: IA32_MCi_MISC (0x403, 0x407, 0x40B, ...)            │ │    │
 │  │     └─────────────────────────────────────────────────────────────┘ │    │
 │  │                              │           │                          │    │
-│  │  5. Crashdump Discovery     │           │                          │    │
+│  │  5. Crashdump Discovery      │           │                          │    │
 │  │     ┌────────────────────────┴───────────┴────────────────────────┐ │    │
 │  │     │  Command: CrashDump Discovery                               │ │    │
 │  │     │  Returns: Available crashdump sections and sizes            │ │    │
 │  │     │  Sections: TOR, PM_Info, Address_Map, etc.                  │ │    │
 │  │     └─────────────────────────────────────────────────────────────┘ │    │
 │  │                              │           │                          │    │
-│  │  6. Read Crashdump Data     │           │                          │    │
+│  │  6. Read Crashdump Data      │           │                          │    │
 │  │     ┌────────────────────────┴───────────┴────────────────────────┐ │    │
 │  │     │  Command: CrashDump GetFrame                                │ │    │
 │  │     │  Section: (TOR, PM_Info, etc.)                              │ │    │
@@ -989,8 +1063,8 @@ This section provides detailed technical information for developers who want to 
 │  │     │  Response: 64-byte frame of crash data                      │ │    │
 │  │     └─────────────────────────────────────────────────────────────┘ │    │
 │  │                              │           │                          │    │
-│  │  7. Store JSON output       │           │                          │    │
-│  │     /var/lib/crashdump/     │           │                          │    │
+│  │  7. Store JSON output        │           │                          │    │
+│  │     /var/lib/crashdump/      │           │                          │    │
 │  │                              │           │                          │    │
 │  └──────────────────────────────┘           └──────────────────────────┘    │
 │                                                                             │
@@ -1000,10 +1074,10 @@ This section provides detailed technical information for developers who want to 
 │  │  Clock: 1 MHz typical (variable negotiated)                            │ │
 │  │                                                                        │ │
 │  │  Frame Format:                                                         │ │
-│  │  ┌────────┬────────┬────────┬────────┬────────┬────────┐              │ │
-│  │  │  AWF   │ Target │ Write  │ Read   │ Cmd/   │  FCS   │              │ │
-│  │  │(preamble)│ Addr │  Len   │  Len   │ Data   │(checksum)│            │ │
-│  │  └────────┴────────┴────────┴────────┴────────┴────────┘              │ │
+│  │  ┌────────┬────────┬────────┬────────┬────────┬──────────┐             │ │
+│  │  │  AWF   │ Target │ Write  │ Read   │ Cmd/   │  FCS     │             │ │
+│  │  │(preamble)│ Addr │  Len   │  Len   │ Data   │(checksum)│             │ │
+│  │  └────────┴────────┴────────┴────────┴────────┴──────────┘             │ │
 │  │                                                                        │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 │                                                                             │
@@ -1021,7 +1095,7 @@ This section provides detailed technical information for developers who want to 
 │                                                                             │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │  Bit  │ Name    │ Description                                          │ │
-│  │  ─────┼─────────┼─────────────────────────────────────────────────────│ │
+│  │  ─────┼─────────┼──────────────────────────────────────────────────────│ │
 │  │  63   │ VAL     │ Valid - Error recorded in this bank                  │ │
 │  │  62   │ OVER    │ Overflow - Multiple errors, some lost                │ │
 │  │  61   │ UC      │ Uncorrected - Error not corrected                    │ │
@@ -1042,7 +1116,7 @@ This section provides detailed technical information for developers who want to 
 │  MCACOD (bits 15:0) Error Type Examples:                                    │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │  Code   │ Meaning                                                      │ │
-│  │  ───────┼─────────────────────────────────────────────────────────────│ │
+│  │  ───────┼──────────────────────────────────────────────────────────────│ │
 │  │  0x0001 │ Unclassified error                                           │ │
 │  │  0x0005 │ Internal parity error                                        │ │
 │  │  0x000A │ Generic I/O error                                            │ │

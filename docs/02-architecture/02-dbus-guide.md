@@ -37,6 +37,25 @@ D-Bus is the central communication system in OpenBMC. All services expose their 
 
 ### Core Components
 
+```mermaid
+flowchart TB
+    daemon["D-Bus Daemon<br/>(Message Router)"]
+
+    subgraph services["Connected Services"]
+        direction LR
+        A["Service A<br/>xyz.openbmc_project.ServiceA"]
+        B["Service B<br/>xyz.openbmc_project.ServiceB"]
+        C["Service C<br/>xyz.openbmc_project.ServiceC"]
+    end
+
+    daemon <--> A
+    daemon <--> B
+    daemon <--> C
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         D-Bus Daemon                            │
@@ -52,6 +71,8 @@ D-Bus is the central communication system in OpenBMC. All services expose their 
 │ project.ServiceA│  │ project.ServiceB│  │ project.ServiceC│
 └─────────────────┘  └─────────────────┘  └─────────────────┘
 ```
+
+</details>
 
 ### Terminology
 
@@ -409,6 +430,18 @@ Associations link related objects together.
 
 ### Association Structure
 
+```mermaid
+flowchart LR
+    sensor["/sensors/temp0<br/><br/>associations:<br/>[inventory,sensors,<br/>/inventory/cpu0]"]
+    inventory["/inventory/cpu0"]
+
+    sensor -->|"sensors"| inventory
+    inventory -->|"inventory"| sensor
+```
+
+<details>
+<summary>ASCII-art version (click to expand)</summary>
+
 ```
 ┌─────────────────────┐           ┌─────────────────────┐
 │  /sensors/temp0     │──────────▶│  /inventory/cpu0    │
@@ -418,6 +451,8 @@ Associations link related objects together.
 │   /inventory/cpu0]  │           │                     │
 └─────────────────────┘           └─────────────────────┘
 ```
+
+</details>
 
 ### Query Associations
 

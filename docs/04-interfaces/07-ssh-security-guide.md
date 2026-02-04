@@ -63,38 +63,19 @@ OpenBMC uses **Dropbear** as its SSH server, a lightweight alternative to OpenSS
 └─────────────────────────────────────────────────────────────────┘
 ```
 ```mermaid
-flowchart LR
-    subgraph SSH_Architecture["SSH Architecture"]
-        
-        subgraph Client["SSH Client"]
-            client_desc["(ssh, PuTTY, scripts)"]
-        end
-        
-        Client -->|"TCP/22"| Dropbear
-        
-        subgraph Dropbear["Dropbear<br/>(SSH Server Daemon)"]
-            features["Features: SSH2, RSA/DSS/ECDSA, SCP, SFTP proxy"]
-        end
-        
-        Dropbear --> PAM
-        
-        subgraph PAM["PAM<br/>(Pluggable Authentication Modules)"]
-            direction TB
-            pam_unix["pam_unix"]
-            pam_ldap["pam_ldap"]
-            pam_tally2["pam_tally2"]
-            pam_limits["pam_limits"]
-        end
-        
-        PAM --> UserDB
-        
-        subgraph UserDB["User Database"]
-            db_desc["(/etc/passwd, /etc/shadow, LDAP)"]
-        end
-        
-    end
+---
+title: SSH Architecture
+---
+flowchart TB
+    Client["SSH Client<br/>(ssh, PuTTY, scripts)"]
+    Client -->|"TCP/22"| Dropbear
+    Dropbear["Dropbear SSH Server<br/>SSH2, RSA/DSS/ECDSA, SCP, SFTP"]
+    Dropbear --> PAM
 
+    PAM["PAM (Pluggable Authentication)<br/>pam_unix, pam_ldap, pam_tally2, pam_limits"]
 
+    PAM --> UserDB
+    UserDB["User Database<br/>(/etc/passwd, /etc/shadow, LDAP)"]
 ```
 ---
 

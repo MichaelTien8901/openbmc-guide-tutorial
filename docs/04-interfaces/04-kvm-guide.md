@@ -27,6 +27,50 @@ Configure remote keyboard, video, and mouse access on OpenBMC.
 
 **KVM (Keyboard, Video, Mouse)** provides remote graphical console access to the host system, allowing operators to interact with the system as if they were physically present. OpenBMC implements KVM through **obmc-ikvm**.
 
+```mermaid
+---
+title: KVM Architecture
+---
+flowchart TB
+    subgraph client["Browser/Client"]
+        direction LR
+        subgraph novnc["noVNC (JavaScript VNC Client)"]
+            direction LR
+            video["Video Display"]
+            keyboard["Keyboard Input"]
+            mouse["Mouse Input"]
+        end
+    end
+
+    client -->|"WebSocket / TCP:5900"| bmcweb
+
+    subgraph bmcweb["bmcweb (WebSocket proxy)"]
+    end
+
+    bmcweb --> ikvm
+
+    subgraph ikvm["obmc-ikvm"]
+        direction LR
+        capture["Video Capture<br/>(JPEG/ASTC)"]
+        hid["USB HID Gadget<br/>(Keyboard/Mouse)"]
+    end
+
+    capture --> videohw["Video Capture HW<br/>(ASPEED/Nuvoton)"]
+    hid --> usbctrl["USB Device Controller"]
+
+    videohw --> host
+    usbctrl --> host
+
+    subgraph host["Host System"]
+        direction LR
+        vga["VGA output"]
+        usb["USB ports"]
+    end
+```
+
+<details>
+<summary>ASCII-art version (click to expand)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                       KVM Architecture                          │
@@ -71,6 +115,8 @@ Configure remote keyboard, video, and mouse access on OpenBMC.
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 
@@ -432,6 +478,42 @@ Advanced implementation details for KVM developers.
 
 ### Video Capture Pipeline
 
+```mermaid
+---
+title: Video Capture Processing Pipeline
+---
+flowchart TB
+    vga["HOST VGA OUTPUT<br/>Analog VGA signals<br/>(R, G, B, HSync, VSync)"]
+
+    subgraph aspeed["ASPEED Video Engine (AST2500/2600)"]
+        direction TB
+        adc["1. ADC Capture<br/>VGA signals → 10-bit ADC sampling<br/>Sync detection → resolution auto-detect"]
+        fb["2. Frame Buffer<br/>Raw pixels → Video memory<br/>Format: RGB565 or RGB888"]
+        jpeg["3. Hardware JPEG Encoder<br/>Full frame → DCT → Quantization → Huffman<br/>Or: Software via libjpeg-turbo"]
+        adc --> fb --> jpeg
+    end
+
+    subgraph ikvm["obmc-ikvm Video Processing"]
+        direction TB
+        capture["Frame Capture Loop"]
+        dequeue["1. Dequeue buffer from V4L2"]
+        dirty["2. Check for frame changes<br/>(dirty detection)"]
+        compress["3. Compress changed regions"]
+        send["4. Send via RFB protocol"]
+        requeue["5. Requeue buffer"]
+        capture --> dequeue --> dirty --> compress --> send --> requeue
+        requeue -.->|"loop"| dequeue
+    end
+
+    vga --> aspeed
+    aspeed -->|"/dev/video0 (V4L2)"| ikvm
+
+    options["Compression Options:<br/>• JPEG (quality 10-100)<br/>• Raw (high bandwidth)<br/>• Tight encoding with zlib"]
+```
+
+<details>
+<summary>ASCII-art version (click to expand)</summary>
+
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                      Video Capture Processing Pipeline                     │
@@ -495,7 +577,49 @@ Advanced implementation details for KVM developers.
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ### RFB (VNC) Protocol Frame Updates
+
+```mermaid
+---
+title: RFB Protocol Frame Updates
+---
+sequenceDiagram
+    participant Client as Client (noVNC)
+    participant Server as Server (obmc-ikvm)
+
+    Client->>Server: FramebufferUpdateRequest<br/>message-type: 3<br/>incremental: 1<br/>x: 0, y: 0<br/>width: 1920, height: 1080
+
+    Note right of Server: Capture frame<br/>Detect changes<br/>Compress regions
+
+    Server->>Client: FramebufferUpdate<br/>message-type: 0<br/>rectangles: 2
+
+    Note left of Client: Rectangle 1: x:100 y:200<br/>400x300, JPEG encoding<br/>Rectangle 2: Cursor update
+```
+
+**Encoding Types Supported:**
+
+| Encoding | ID | Description |
+|----------|-----|-------------|
+| Raw | 0 | Uncompressed pixels (RGB888/RGB565) |
+| CopyRect | 1 | Copy from another screen region |
+| RRE | 2 | Rise and Run length Encoding |
+| Hextile | 5 | 16x16 tile-based compression |
+| ZRLE | 16 | Zlib Run-Length Encoding |
+| Tight | 7 | Tight compression with JPEG option |
+| JPEG | 21 | JPEG-compressed rectangle |
+| Cursor | -239 | Client-side cursor rendering |
+| DesktopSize | -223 | Desktop size change notification |
+
+**Tight Encoding Control Byte:**
+- Bits 0-2: zlib stream reset flags
+- Bits 3-4: fill mode / filter
+- Bits 5-7: compression type (0x09 = JPEG, 0x00-0x07 = Basic)
+- JPEG Quality: pseudo-encoding -23 to -32 sets quality 0-9 (maps to 5-95%)
+
+<details>
+<summary>ASCII-art version (click to expand)</summary>
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -574,6 +698,8 @@ Advanced implementation details for KVM developers.
 │                                                                            │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### USB HID Gadget Protocol
 
@@ -664,6 +790,70 @@ Advanced implementation details for KVM developers.
 
 ### WebSocket to VNC Bridge
 
+```mermaid
+---
+title: WebSocket Connection Establishment
+---
+sequenceDiagram
+    participant Browser
+    participant bmcweb
+    participant ikvm as obmc-ikvm
+
+    Browser->>bmcweb: GET /kvm/0<br/>Upgrade: websocket<br/>Sec-WebSocket-Protocol: binary
+    bmcweb->>Browser: HTTP/1.1 101 Switching<br/>Connection: Upgrade<br/>Sec-WebSocket-Accept: [hash]
+
+    Browser->>bmcweb: WebSocket Binary Frame
+    bmcweb->>ikvm: Unix Socket<br/>/var/run/obmc-ikvm.sock
+    ikvm->>bmcweb: RFB Protocol Version
+    bmcweb->>Browser: WebSocket Binary Frame
+```
+
+```mermaid
+---
+title: KVM Data Flow
+---
+sequenceDiagram
+    participant noVNC as noVNC (browser)
+    participant bmcweb
+    participant ikvm as obmc-ikvm
+    participant Host
+
+    noVNC->>bmcweb: KeyEvent (RFB msg)<br/>WebSocket binary frame
+    bmcweb->>ikvm: Unix socket
+    ikvm->>Host: write() /dev/hidg0<br/>USB HID report
+
+    Host->>ikvm: Video capture<br/>V4L2 frame
+    ikvm->>bmcweb: Unix socket (JPEG data)
+    bmcweb->>noVNC: FramebufferUpdate<br/>WebSocket binary frame
+```
+
+**bmcweb KVM Handler (kvm.hpp):**
+
+```cpp
+void handleKvmWebSocket(crow::websocket::Connection& conn) {
+    // 1. Connect to obmc-ikvm Unix socket
+    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    struct sockaddr_un addr;
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, "/var/run/obmc-ikvm.sock", sizeof(...));
+    connect(sock, (struct sockaddr*)&addr, sizeof(addr));
+
+    // 2. Bidirectional forwarding
+    // WebSocket → Unix socket (client input)
+    conn.onMessage([sock](const std::string& msg) {
+        write(sock, msg.data(), msg.size());
+    });
+
+    // Unix socket → WebSocket (video/responses)
+    async_read(sock, buffer, [&conn](size_t bytes) {
+        conn.sendBinary(buffer, bytes);
+    });
+}
+```
+
+<details>
+<summary>ASCII-art version (click to expand)</summary>
+
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                    bmcweb KVM WebSocket Implementation                     │
@@ -690,29 +880,6 @@ Advanced implementation details for KVM developers.
 │     │  RFB Protocol Version     │  /var/run/obmc-ikvm.sock    │            │
 │     │<─────────────────────────>│<───────────────────────────>│            │
 │     │                           │                             │            │
-│                                                                            │
-│  BMCWEB KVM HANDLER (kvm.hpp):                                             │
-│  ─────────────────────────────                                             │
-│                                                                            │
-│  void handleKvmWebSocket(crow::websocket::Connection& conn) {              │
-│      // 1. Connect to obmc-ikvm Unix socket                                │
-│      int sock = socket(AF_UNIX, SOCK_STREAM, 0);                           │
-│      struct sockaddr_un addr;                                              │
-│      addr.sun_family = AF_UNIX;                                            │
-│      strncpy(addr.sun_path, "/var/run/obmc-ikvm.sock", sizeof(...));       │
-│      connect(sock, (struct sockaddr*)&addr, sizeof(addr));                 │
-│                                                                            │
-│      // 2. Bidirectional forwarding                                        │
-│      // WebSocket → Unix socket (client input)                             │
-│      conn.onMessage([sock](const std::string& msg) {                       │
-│          write(sock, msg.data(), msg.size());                              │
-│      });                                                                   │
-│                                                                            │
-│      // Unix socket → WebSocket (video/responses)                          │
-│      async_read(sock, buffer, [&conn](size_t bytes) {                      │
-│          conn.sendBinary(buffer, bytes);                                   │
-│      });                                                                   │
-│  }                                                                         │
 │                                                                            │
 │  DATA FLOW:                                                                │
 │  ─────────                                                                 │
@@ -742,6 +909,8 @@ Advanced implementation details for KVM developers.
 │                                                                            │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Source Code Reference
 

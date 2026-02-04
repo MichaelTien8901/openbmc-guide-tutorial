@@ -170,6 +170,52 @@ Advanced implementation details for watchdog timer developers.
 
 ### Watchdog Timer State Machine
 
+```mermaid
+---
+title: Watchdog Timer State Machine
+---
+stateDiagram-v2
+    [*] --> DISABLED
+
+    DISABLED --> RUNNING : Enable=true
+
+    RUNNING --> RUNNING : Timer Reset (Kick)
+    RUNNING --> EXPIRED : TimeRemaining == 0
+
+    EXPIRED --> DISABLED : Disable
+    EXPIRED --> ActionNone : Action: None
+    EXPIRED --> ActionReset : Action: Reset
+
+    state ActionNone {
+        [*] --> LogEvent
+        LogEvent --> ReturnDisabled
+        ReturnDisabled --> [*]
+    }
+
+    state ActionReset {
+        [*] --> PowerCycle
+        PowerCycle --> StateManager
+        StateManager --> [*]
+    }
+
+    note right of DISABLED : Enabled=false
+    note right of RUNNING : Enabled=true\nTimeRemaining counting down
+    note right of EXPIRED : Execute ExpireAction
+```
+
+**Timer Properties:**
+
+| Property | Description |
+|----------|-------------|
+| `Interval` | Total countdown time (microseconds) |
+| `TimeRemaining` | Current time left (decrements each tick) |
+| `Enabled` | Whether timer is active |
+| `ExpireAction` | What to do on timeout (None, HardReset, PowerOff, etc.) |
+| `CurrentTimerUse` | BIOS_FRB2, BIOS_POST, OS_LOAD, SMS_OS, OEM |
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                      Watchdog Timer State Machine                          │
@@ -220,6 +266,8 @@ Advanced implementation details for watchdog timer developers.
 │                                                                            │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Timer Implementation Architecture
 

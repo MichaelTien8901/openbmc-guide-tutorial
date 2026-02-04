@@ -26,6 +26,34 @@ Configure BMC network settings using phosphor-networkd.
 
 **phosphor-networkd** manages BMC network configuration, providing D-Bus interfaces for IP configuration, VLAN, DNS, and network settings.
 
+```mermaid
+---
+title: Network Architecture
+---
+flowchart TB
+    subgraph apis["Configuration APIs"]
+        direction LR
+        redfish["Redfish<br/>API"]
+        ipmi["IPMI<br/>Network"]
+        dbus["D-Bus<br/>busctl"]
+        webui["WebUI<br/>Config"]
+    end
+
+    subgraph networkd["phosphor-networkd"]
+        direction LR
+        iface["Interface Mgmt<br/>eth0, eth1"]
+        ipvlan["IP/VLAN Config<br/>static, dhcp"]
+        dns["DNS/DHCP<br/>Hostname"]
+    end
+
+    systemd["systemd-networkd<br/>(.network files)"]
+
+    apis --> networkd --> systemd
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                   Network Architecture                          │
@@ -56,6 +84,8 @@ Configure BMC network settings using phosphor-networkd.
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 
@@ -487,6 +517,28 @@ Advanced implementation details for network configuration developers.
 
 phosphor-networkd translates D-Bus calls to systemd-networkd configuration:
 
+```mermaid
+---
+title: Network Configuration Flow
+---
+flowchart TB
+    request["Redfish/D-Bus Request"]
+
+    networkd["phosphor-networkd<br/>xyz.openbmc_project.Network"]
+
+    config["<b>/etc/systemd/network/*.network</b><br/>[Match] Name=eth0<br/>[Network]<br/>Address=192.168.1.100/24<br/>Gateway=192.168.1.1<br/>DNS=8.8.8.8<br/>DHCP=no"]
+
+    systemd["systemd-networkd<br/>Applies configuration to kernel network stack"]
+
+    files["<b>File Naming Convention:</b><br/>/etc/systemd/network/<br/>├── 00-bmc-eth0.network (Static/DHCP)<br/>├── 00-bmc-eth0.netdev (VLAN defs)<br/>└── 10-bmc-eth0.1.network (VLAN config)"]
+
+    request --> networkd --> config --> systemd
+    config -.- files
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    Network Configuration Flow                           │
@@ -529,7 +581,37 @@ phosphor-networkd translates D-Bus calls to systemd-networkd configuration:
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ### DHCP Transaction Flow
+
+```mermaid
+---
+title: DHCP Client Operation
+---
+sequenceDiagram
+    participant BMC as BMC (systemd-networkd)
+    participant Server as DHCP Server
+
+    BMC->>Server: 1. DHCPDISCOVER (broadcast)
+    Server->>BMC: 2. DHCPOFFER (IP, Mask, Gateway, DNS)
+    BMC->>Server: 3. DHCPREQUEST (Requesting offered IP)
+    Server->>BMC: 4. DHCPACK (Lease confirmed)
+
+    Note over BMC: Lease stored in:<br/>/run/systemd/netif/leases/
+    Note over BMC: D-Bus Properties Updated:<br/>- Network.IP (Address, Gateway)<br/>- DHCPEnabled=true
+```
+
+**DHCP Options Handled:**
+- Option 1: Subnet Mask
+- Option 3: Router (Gateway)
+- Option 6: DNS Servers
+- Option 12: Hostname
+- Option 15: Domain Name
+- Option 42: NTP Servers
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -570,7 +652,42 @@ phosphor-networkd translates D-Bus calls to systemd-networkd configuration:
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ### VLAN Implementation
+
+```mermaid
+---
+title: VLAN Configuration
+---
+flowchart TB
+    eth0["eth0<br/>(untagged traffic)"]
+
+    eth0 --> vlan100["eth0.100<br/>VLAN 100<br/>Management"]
+    eth0 --> vlan200["eth0.200<br/>VLAN 200<br/>Storage"]
+    eth0 --> vlan300["eth0.300<br/>VLAN 300<br/>Cluster"]
+```
+
+**VLAN .netdev file** (`/etc/systemd/network/00-eth0.100.netdev`):
+```ini
+[NetDev]
+Name=eth0.100
+Kind=vlan
+
+[VLAN]
+Id=100
+```
+
+**D-Bus VLAN Creation:**
+```bash
+busctl call xyz.openbmc_project.Network \
+    /xyz/openbmc_project/network/eth0 \
+    xyz.openbmc_project.Network.VLAN.Create \
+    VLAN sq "eth0.100" 100
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -611,7 +728,41 @@ phosphor-networkd translates D-Bus calls to systemd-networkd configuration:
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ### Link State Monitoring
+
+```mermaid
+---
+title: Link State Detection
+---
+flowchart TB
+    netlink["Kernel Netlink Events"]
+    networkd["phosphor-networkd<br/>Subscribes to RTM_NEWLINK / RTM_DELLINK"]
+
+    linkup["Link Up<br/>Set D-Bus LinkUp=true"]
+    linkdown["Link Down<br/>Set D-Bus LinkUp=false"]
+    speedchange["Link Speed Change<br/>Update Speed prop"]
+
+    netlink --> networkd
+    networkd --> linkup
+    networkd --> linkdown
+    networkd --> speedchange
+```
+
+**D-Bus Properties** (`/xyz/openbmc_project/network/eth0`):
+- `LinkUp` (bool) - Physical link state
+- `Speed` (uint32) - Link speed in Mbps
+- `AutoNeg` (bool) - Auto-negotiation enabled
+- `MTU` (uint32) - Maximum transmission unit
+
+**Redfish Mapping:**
+- `LinkUp` → `LinkStatus` ("LinkUp" / "LinkDown")
+- `Speed` → `SpeedMbps`
+- `AutoNeg` → `AutoNeg`
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -650,6 +801,8 @@ phosphor-networkd translates D-Bus calls to systemd-networkd configuration:
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### Source Code Reference
 

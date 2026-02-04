@@ -34,6 +34,32 @@ A **Baseboard Management Controller (BMC)** is a specialized microcontroller emb
 - **KVM**: Remote keyboard, video, mouse access
 - **Virtual Media**: Mount remote images for OS installation
 
+```mermaid
+---
+title: BMC in Server Architecture
+---
+flowchart TB
+    subgraph Server
+        subgraph Host["Host System"]
+            direction TB
+            CPU
+            Memory
+            Storage
+        end
+
+        Host -->|"Sensors, Control"| BMC
+
+        subgraph BMC["BMC"]
+            firmware["OpenBMC Firmware"]
+        end
+    end
+
+    BMC -->|"Network: IPMI, Redfish, SSH"| DCIM["Data Center Management"]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        Server                               │
@@ -63,6 +89,8 @@ A **Baseboard Management Controller (BMC)** is a specialized microcontroller emb
                   │ Management      │
                   └─────────────────┘
 ```
+
+</details>
 
 ---
 
@@ -103,6 +131,46 @@ OpenBMC is used by major technology companies including:
 
 OpenBMC uses a modern, service-oriented architecture:
 
+```mermaid
+---
+title: OpenBMC Architecture
+---
+flowchart TB
+    subgraph interfaces["External Interfaces"]
+        direction TB
+        IPMI
+        Redfish
+        WebUI
+        SSH
+    end
+
+    dbus["D-Bus (Inter-process Communication)"]
+
+    subgraph services["Phosphor Services"]
+        direction TB
+        Sensors["Sensors Manager"]
+        State["State Manager"]
+        Logging["Logging Manager"]
+    end
+
+    subgraph kernel["Linux Kernel"]
+        direction TB
+        hwmon
+        GPIO
+        I2C
+    end
+
+    hardware["BMC Hardware (ASPEED AST2500/2600, Nuvoton)"]
+
+    interfaces --> dbus
+    dbus --> services
+    services --> kernel
+    kernel --> hardware
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    External Interfaces                      │
@@ -129,6 +197,8 @@ OpenBMC uses a modern, service-oriented architecture:
 └─────────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ### Key Components
 
 - **D-Bus**: Central communication bus connecting all services
@@ -144,6 +214,27 @@ OpenBMC uses a modern, service-oriented architecture:
 ### QEMU: The Standard Development Platform
 
 OpenBMC development does **not require physical BMC hardware**. QEMU emulation is the standard development environment used by professional OpenBMC developers at major companies.
+
+```mermaid
+---
+title: QEMU Development Environment
+---
+flowchart LR
+    subgraph DevMachine["Your Development Machine"]
+        subgraph QEMU["QEMU (ast2600-evb)"]
+            subgraph image["OpenBMC Image"]
+            features["D-Bus services, Redfish API,<br/>IPMI daemon, Sensors,<br/>State management"]
+            end
+        end
+
+        QEMU -->|"Port forwarding:<br/>SSH, HTTPS, IPMI"| testing
+
+        testing["Test with: curl, ipmitool, ssh, browser"]
+    end
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -170,6 +261,8 @@ OpenBMC development does **not require physical BMC hardware**. QEMU emulation i
 │   └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ### What You Can Learn with QEMU
 

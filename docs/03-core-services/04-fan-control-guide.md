@@ -27,6 +27,28 @@ Configure thermal management with phosphor-pid-control.
 
 **phosphor-pid-control** (swampd) is the thermal management daemon for OpenBMC. It uses PID (Proportional-Integral-Derivative) control to maintain optimal temperatures by adjusting fan speeds.
 
+```mermaid
+---
+title: Fan Control Architecture
+---
+flowchart TB
+    sensors["Temperature Sensors<br/>(CPU, DIMM, Inlet, Outlet, VRM, etc.)"]
+
+    sensors --> pid
+
+    subgraph pid["phosphor-pid-control"]
+        direction TB
+        z0["Zone 0<br/>(CPU area)<br/>PID Control"]
+        z1["Zone 1<br/>(Memory area)<br/>PID Control"]
+        zn["Zone N<br/>(...)<br/>PID Control"]
+    end
+
+    pid --> fans["Fan PWM Outputs<br/>(Fan0, Fan1, Fan2, Fan3, ...)"]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                   Fan Control Architecture                      │
@@ -55,6 +77,8 @@ Configure thermal management with phosphor-pid-control.
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

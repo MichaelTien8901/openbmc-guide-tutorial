@@ -40,6 +40,38 @@ eSPI (Enhanced Serial Peripheral Interface) is Intel's successor to LPC (Low Pin
 
 ### eSPI Architecture
 
+```mermaid
+flowchart TB
+    subgraph Architecture["eSPI Architecture"]
+        direction TB
+        
+        subgraph Host["Host (Intel/AMD PCH)"]
+            MasterCtrl["eSPI Controller (Master)"]
+        end
+        
+        subgraph Bus["eSPI Bus"]
+            direction LR
+            Signals["CS# | CLK <br/>| IO[3:0] (Quad SPI) <br/>| Alert# | Reset#"]
+        end
+        
+        subgraph BMC["BMC (AST2500/2600)"]
+            subgraph SlaveCtrl["eSPI Controller (Slave)"]
+                direction TB
+                Peripheral["Peripheral<br/>Channel<br/>(I/O, MMIO)"]
+                VirtualWire["Virtual<br/>Wire<br/>Channel"]
+                OOB["OOB<br/>Message<br/>Channel"]
+                Flash["Flash<br/>Access<br/>Channel"]
+            end
+        end
+        
+        MasterCtrl <--> Bus
+        Bus <--> SlaveCtrl
+    end
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        eSPI Architecture                                    │
@@ -81,34 +113,8 @@ eSPI (Enhanced Serial Peripheral Interface) is Intel's successor to LPC (Low Pin
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
-```mermaid
-flowchart TB
-    subgraph Architecture["eSPI Architecture"]
-        direction TB
-        
-        subgraph Host["Host (Intel/AMD PCH)"]
-            MasterCtrl["eSPI Controller (Master)"]
-        end
-        
-        subgraph Bus["eSPI Bus"]
-            direction LR
-            Signals["CS# | CLK <br/>| IO[3:0] (Quad SPI) <br/>| Alert# | Reset#"]
-        end
-        
-        subgraph BMC["BMC (AST2500/2600)"]
-            subgraph SlaveCtrl["eSPI Controller (Slave)"]
-                direction TB
-                Peripheral["Peripheral<br/>Channel<br/>(I/O, MMIO)"]
-                VirtualWire["Virtual<br/>Wire<br/>Channel"]
-                OOB["OOB<br/>Message<br/>Channel"]
-                Flash["Flash<br/>Access<br/>Channel"]
-            end
-        end
-        
-        MasterCtrl <--> Bus
-        Bus <--> SlaveCtrl
-    end
-```
+
+</details>
 
 ### eSPI Channel Types
 

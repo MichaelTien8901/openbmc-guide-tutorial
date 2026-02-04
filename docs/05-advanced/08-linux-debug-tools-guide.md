@@ -29,6 +29,41 @@ OpenBMC development requires debugging at multiple levels—from early kernel bo
 
 ### Tool Selection Guide
 
+```mermaid
+---
+title: Debug Tool Selection Flowchart
+---
+flowchart LR
+    Q{"What are you debugging?"}
+
+    Q --> Boot["Boot issues before console?"]
+    Boot --> EarlyCon["early_printk / earlycon"]
+
+    Q --> Memory["Memory errors<br/>(buffer overflow, use-after-free)?"]
+    Memory --> ASan["ASan (compile-time) or<br/>Valgrind memcheck"]
+
+    Q --> UB["Undefined behavior<br/>(overflow, null deref)?"]
+    UB --> UBSan["UBSan"]
+
+    Q --> Races["Data races /<br/>threading bugs?"]
+    Races --> TSan["TSan (64-bit) or<br/>Valgrind helgrind"]
+
+    Q --> Uninit["Uninitialized memory?"]
+    Uninit --> MSan["MSan (complex) or<br/>Valgrind memcheck"]
+
+    Q --> Leaks["Memory leaks /<br/>profiling?"]
+    Leaks --> Valgrind["Valgrind memcheck / massif"]
+
+    Q --> KernelMem["Kernel memory bugs?"]
+    KernelMem --> KASAN["KASAN"]
+
+    Q --> KernelLock["Kernel locking bugs?"]
+    KernelLock --> Lockdep["lockdep"]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +-------------------------------------------------------------------------+
 |                    Debug Tool Selection Flowchart                       |
@@ -69,6 +104,8 @@ OpenBMC development requires debugging at multiple levels—from early kernel bo
 |                   +--> lockdep                                          |
 +-------------------------------------------------------------------------+
 ```
+
+</details>
 
 ### Tool Comparison
 

@@ -27,6 +27,31 @@ Configure Sensor Data Records (SDR) for IPMI sensor management.
 
 **Sensor Data Records (SDR)** describe sensors and their properties for IPMI clients. OpenBMC dynamically generates SDR from D-Bus sensor objects.
 
+```mermaid
+---
+title: SDR Architecture
+---
+flowchart TB
+    subgraph client["IPMI Client"]
+        ipmitool["ipmitool sdr list"]
+    end
+
+    subgraph ipmihost["phosphor-ipmi-host"]
+        sdrgen["SDR Generation<br/>(Dynamic from D-Bus sensor objects)"]
+    end
+
+    subgraph dbus["D-Bus Sensors"]
+        sensorval["xyz.openbmc_project.Sensor.Value"]
+        threshold["xyz.openbmc_project.Sensor.Threshold.*"]
+    end
+
+    client --> ipmihost
+    ipmihost --> dbus
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                      SDR Architecture                           │
@@ -53,6 +78,8 @@ Configure Sensor Data Records (SDR) for IPMI sensor management.
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

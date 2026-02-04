@@ -32,6 +32,33 @@ Configure hardware through JSON-based entity definitions and probes.
 - Configures sensors, fans, LEDs, and other components via **JSON**
 - Replaces hardcoded YAML configurations with dynamic discovery
 
+```mermaid
+---
+title: Entity Manager Architecture
+---
+flowchart TB
+    json["JSON Configurations<br/>/usr/share/entity-manager/configs/"]
+
+    json --> em
+
+    subgraph em["Entity Manager"]
+        direction LR
+        probes["Probes<br/>(hardware detection)"]
+        matcher["Matcher<br/>(evaluates conditions)"]
+        exposes["Exposes<br/>(creates D-Bus objs)"]
+        probes --> matcher --> exposes
+    end
+
+    em --> dbus["D-Bus<br/>xyz.openbmc_project.Inventory.Item.*<br/>xyz.openbmc_project.Configuration.*"]
+
+    dbus --> sensors["dbus-sensors"]
+    dbus --> fan["fan-control"]
+    dbus --> fru["FRU"]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Entity Manager Architecture                  │
@@ -66,6 +93,8 @@ Configure hardware through JSON-based entity definitions and probes.
 │  └────────────┘       └───────────┘       └───────────┘         │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

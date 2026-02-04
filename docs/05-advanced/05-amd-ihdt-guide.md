@@ -27,6 +27,41 @@ Configure AMD EPYC system management and debug capabilities on OpenBMC.
 
 AMD EPYC platforms provide system management and debug capabilities through **APML (Advanced Platform Management Link)** and **HDT (Hardware Debug Tool)**. This guide covers the BMC integration for AMD server platforms.
 
+```mermaid
+---
+title: AMD Platform Management Architecture
+---
+flowchart TB
+    subgraph bmcapps["BMC Applications"]
+        direction LR
+        telemetry["Telemetry<br/>Monitoring"]
+        ras["RAS/Error<br/>Handling"]
+        powermgmt["Power Mgmt<br/>Control"]
+    end
+
+    subgraph apml["APML Library"]
+        apmllib["apml_sbrmi / apml_sbtsi drivers"]
+    end
+
+    subgraph bus["I2C / I3C Bus"]
+        i2cbus["Communication Bus"]
+    end
+
+    subgraph cpu["AMD EPYC Processor"]
+        direction LR
+        sbrmi["SB-RMI<br/>(Remote Mgmt I/F)"]
+        sbtsi["SB-TSI<br/>(Thermal Sensor)"]
+        hdt["HDT Port<br/>(Hardware Debug)"]
+    end
+
+    bmcapps --> apml
+    apml --> bus
+    bus --> cpu
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +----------------------------------------------------------------------+
 |                  AMD Platform Management Architecture                |
@@ -61,6 +96,8 @@ AMD EPYC platforms provide system management and debug capabilities through **AP
 |  +-----------------------------------------------------------------+ |
 +----------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 

@@ -40,6 +40,43 @@ Configure and use MCTP and PLDM protocols on OpenBMC.
 
 ### Protocol Stack
 
+```mermaid
+---
+title: MCTP/PLDM Protocol Stack
+---
+flowchart TB
+    subgraph app["Application Layer"]
+        direction TB
+        pldm["PLDM Types<br/>0,2,3,4,5"]
+        spdm["SPDM<br/>Security"]
+        ncsi["NCSI<br/>Network Control"]
+        nvme["NVMe-MI<br/>Storage Mgmt"]
+    end
+
+    app --> transport
+
+    subgraph transport["MCTP Transport Layer"]
+        direction TB
+        assembly["Message Assembly<br/>& Fragmentation"]
+        routing["Packet Routing<br/>& Forwarding"]
+        eid["EID Management<br/>& Discovery"]
+    end
+
+    transport --> physical
+
+    subgraph physical["Physical Transport Bindings"]
+        direction TB
+        i2c["I2C<br/>DSP0237"]
+        smbus["SMBus<br/>DSP0237"]
+        pcie["PCIe<br/>DSP0238"]
+        serial["Serial<br/>DSP0239"]
+        usb["USB<br/>DSP0283"]
+    end
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +-------------------------------------------------------------------------+
 |                    MCTP/PLDM Protocol Stack                             |
@@ -75,6 +112,8 @@ Configure and use MCTP and PLDM protocols on OpenBMC.
 |                                                                         |
 +-------------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 

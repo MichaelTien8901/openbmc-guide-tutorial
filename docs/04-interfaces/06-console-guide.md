@@ -27,6 +27,36 @@ Configure serial console access and host logging on OpenBMC.
 
 **Serial Console** provides text-mode access to the host system through the BMC, enabling boot monitoring, BIOS configuration, and command-line access when graphical interfaces are unavailable.
 
+```mermaid
+---
+title: Console Architecture
+---
+flowchart TB
+    subgraph clients["Clients"]
+        direction LR
+        webui["WebUI<br/>Console"]
+        ssh["SSH<br/>Console"]
+        sol["IPMI SOL<br/>ipmitool"]
+    end
+
+    bmcweb["bmcweb<br/>WebSocket: /console/default"]
+
+    subgraph console["obmc-console"]
+        direction LR
+        server["Console Server<br/>(multiplexer)"]
+        hostlogger["hostlogger<br/>(persistent logging)"]
+    end
+
+    serial["/dev/ttyS*, /dev/ttyVUART*"]
+
+    host["Host System<br/>(Serial console)"]
+
+    clients --> bmcweb --> console --> serial --> host
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Console Architecture                         │
@@ -66,6 +96,8 @@ Configure serial console access and host logging on OpenBMC.
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

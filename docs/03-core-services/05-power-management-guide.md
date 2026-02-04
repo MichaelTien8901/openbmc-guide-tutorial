@@ -33,6 +33,38 @@ OpenBMC power management includes several components:
 - **Power sequencing**: GPIO-based power control
 - **Power capping**: System power limiting
 
+```mermaid
+---
+title:  Power Management Architecture  
+---
+
+flowchart TB
+    state["phosphor-state-manager<br/>(Chassis/Host state control)"]
+
+    state --> power & regulators & sequencer
+
+    subgraph services["Power Control Services"]
+        direction LR
+        power["phosphor-power<br/>(PSU mgmt)"]
+        regulators["phosphor-regulators<br/>(VRM cfg)"]
+        sequencer["Power Sequencer<br/>(GPIO)"]
+    end
+
+    subgraph hw["Hardware Interfaces"]
+        direction LR
+        pmbus["PMBus PSUs"]
+        i2c["I2C/VID Regulators"]
+        gpio["GPIO Control"]
+    end
+
+    power --> pmbus
+    regulators --> i2c
+    sequencer --> gpio
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                   Power Management Architecture                 │
@@ -58,6 +90,8 @@ OpenBMC power management includes several components:
 │  └───────────┘       └───────────┘        └───────────┘         │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

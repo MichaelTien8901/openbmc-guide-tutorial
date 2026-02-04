@@ -27,6 +27,26 @@ Configure and use dbus-sensors for hardware monitoring.
 
 **dbus-sensors** is a collection of sensor daemons that expose hardware sensor data via D-Bus. Each daemon handles a specific sensor type and integrates with Entity Manager for configuration.
 
+```mermaid
+---
+title: dbus-sensors Architecture
+---
+flowchart TB
+    subgraph sensors["Sensor Daemons"]
+        direction LR
+        adc["ADCSensor<br/>(ADC inputs)"]
+        hwmon["HwmonTempSensor<br/>(I2C temps)"]
+        psu["PSUSensor<br/>(PMBus PSU)"]
+    end
+
+    sensors --> dbus["D-Bus<br/>xyz.openbmc_project.Sensor.Value"]
+    dbus <--> em["Entity Manager<br/>(JSON Configuration)"]
+    em --> kernel["Linux Kernel<br/>/sys/class/hwmon, /sys/bus/iio"]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                      dbus-sensors Architecture                 │
@@ -53,6 +73,8 @@ Configure and use dbus-sensors for hardware monitoring.
 │  └───────────────────────────────────────────────────────┘     │
 └────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

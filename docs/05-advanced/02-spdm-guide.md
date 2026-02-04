@@ -54,6 +54,60 @@ SPDM addresses these by providing:
 
 ## Architecture
 
+```mermaid
+---
+title: SPDM Architecture in OpenBMC
+---
+flowchart TB
+    subgraph mgmtapps["Management Applications"]
+        direction TB
+        redfish["Redfish bmcweb<br/>ComponentIntegrity"]
+        invmgr["Inventory Manager<br/>Certificate Population"]
+    end
+
+    subgraph dbus["D-Bus Layer"]
+        dbusintf["xyz.openbmc_project.SPDM<br/>xyz.openbmc_project.Attestation"]
+    end
+
+    subgraph spdmd["spdmd (SPDM Daemon)"]
+        direction TB
+        session["Session<br/>Manager"]
+        certval["Certificate<br/>Validator"]
+        measure["Measurement<br/>Collector"]
+        crypto["Crypto<br/>Engine"]
+    end
+
+    subgraph libspdm["libspdm"]
+        lib["DMTF Reference Implementation<br/>Requester/Responder"]
+    end
+
+    subgraph mctp["MCTP Transport Layer (mctpd)"]
+        direction TB
+        i2c["I2C/SMBus"]
+        pcie["PCIe VDM"]
+        usb["USB"]
+        spi["SPI"]
+    end
+
+    subgraph responders["SPDM Responders"]
+        direction TB
+        gpu["GPU<br/>EID:10"]
+        nic["NIC<br/>EID:11"]
+        nvme["NVMe<br/>EID:12"]
+        psu["PSU<br/>EID:13"]
+        fpga["FPGA<br/>EID:14"]
+    end
+
+    mgmtapps --> dbus
+    dbus --> spdmd
+    spdmd --> libspdm
+    libspdm --> mctp
+    mctp --> responders
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +-------------------------------------------------------------------------+
 |                       SPDM Architecture in OpenBMC                      |
@@ -107,6 +161,8 @@ SPDM addresses these by providing:
 |   +-------------------------------------------------------------------+ |
 +-------------------------------------------------------------------------+
 ```
+
+</details>
 
 ### Component Roles
 

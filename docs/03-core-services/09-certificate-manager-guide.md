@@ -27,6 +27,31 @@ Configure TLS/SSL certificates for secure BMC communication.
 
 **phosphor-certificate-manager** manages X.509 certificates for HTTPS, LDAP, and other secure services on OpenBMC.
 
+```mermaid
+---
+title: Certificate Manager Architecture
+---
+flowchart TB
+    subgraph certmgr["phosphor-certificate-manager"]
+        direction LR
+        https["HTTPS Certs<br/>(/etc/ssl/certs/https/)"]
+        ldapcert["LDAP Certs<br/>(/etc/ssl/certs/ldap/)"]
+        authority["Authority Certs<br/>(Trusted CAs)"]
+        csr["CSR Generation<br/>(Signing Req)"]
+    end
+
+    subgraph consumers["Certificate Consumers"]
+        direction LR
+        bmcweb["bmcweb<br/>(HTTPS server)"]
+        ldapclient["LDAP Client<br/>(secure auth)"]
+    end
+
+    certmgr --> consumers
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +-------------------------------------------------------------------+
 |                Certificate Manager Architecture                   |
@@ -58,6 +83,8 @@ Configure TLS/SSL certificates for secure BMC communication.
 |                                                                   |
 +-------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 

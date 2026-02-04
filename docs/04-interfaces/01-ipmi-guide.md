@@ -31,6 +31,35 @@ Implement and extend IPMI functionality in OpenBMC.
 - **Host IPMI**: KCS/BT interface to the host
 - **Network IPMI**: RMCP/RMCP+ over LAN
 
+```mermaid
+---
+title: IPMI Architecture
+---
+flowchart TB
+    clients["External Clients<br/>(ipmitool, vendor tools)"]
+
+    clients --> rmcp["RMCP+/LAN<br/>(Network)"]
+    clients --> kcs["KCS/BT<br/>(Host)"]
+
+    rmcp --> ipmid
+    kcs --> ipmid
+
+    subgraph ipmid["ipmid"]
+        subgraph handlers["Command Handlers (Providers)"]
+            direction TB
+            Chassis
+            Sensor
+            Storage
+            OEM
+        end
+    end
+
+    ipmid --> dbus["D-Bus<br/>(phosphor-* services, sensors, state)"]
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                      IPMI Architecture                          │
@@ -62,6 +91,8 @@ Implement and extend IPMI functionality in OpenBMC.
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 
