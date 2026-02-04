@@ -554,6 +554,54 @@ pldmtool platform getpdr -d 2 -m 9
 
 ### Architecture
 
+```mermaid
+---
+title: OpenBMC MCTP/PLDM Architecture
+---
+flowchart TB
+    subgraph dbus_services["D-Bus Services"]
+        direction LR
+        sensors["Sensor Service<br/>(dbus-sensors)"]
+        statemgr["State Manager<br/>(phosphor-state-mgr)"]
+        fwupdate["Firmware Update<br/>(phosphor-bmc-code-mgmt)"]
+    end
+
+    subgraph dbus_layer["D-Bus"]
+        dbus_ns["xyz.openbmc_project.PLDM<br/>xyz.openbmc_project.MCTP"]
+    end
+
+    subgraph pldmd_layer["pldmd"]
+        direction TB
+        pldm_req["PLDM Requester<br/>(host comms)"]
+        pldm_resp["PLDM Responder<br/>(BMC as target)"]
+        pdr_mgr["PDR Manager<br/>(PDR repository)"]
+        libpldm["libpldm<br/>(PLDM message encode/decode, PDR parsing)"]
+    end
+
+    subgraph mctpd_layer["mctpd"]
+        direction TB
+        route_mgr["Route Manager"]
+        eid_pool["EID Pool<br/>Manager"]
+        link_mgmt["Link Management"]
+        libmctp["libmctp<br/>(MCTP packet handling, transport bindings)"]
+    end
+
+    subgraph kernel_layer["Linux Kernel MCTP Stack"]
+        direction LR
+        af_mctp["AF_MCTP Socket"]
+        mctp_net["MCTP Network<br/>Device"]
+        transport["Transport Drivers<br/>(i2c-mctp, etc.)"]
+    end
+
+    dbus_services --> dbus_layer
+    dbus_layer --> pldmd_layer
+    pldmd_layer --> mctpd_layer
+    mctpd_layer --> kernel_layer
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +-------------------------------------------------------------------------+
 |                    OpenBMC MCTP/PLDM Architecture                       |
@@ -613,6 +661,8 @@ pldmtool platform getpdr -d 2 -m 9
 |                                                                         |
 +-------------------------------------------------------------------------+
 ```
+
+</details>
 
 ### libmctp
 

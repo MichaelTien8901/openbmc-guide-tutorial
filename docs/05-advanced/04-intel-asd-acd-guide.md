@@ -368,6 +368,44 @@ Autonomous Crash Dump automatically collects CPU diagnostic data when critical e
 
 ### Crash Dump Architecture
 
+```mermaid
+---
+title: Crash Dump Collection Flow
+---
+flowchart TB
+    subgraph step1["1. Error Occurs"]
+        cpu["CPU Asserts<br/>CATERR# / IERR#"]
+    end
+
+    subgraph step2["2. BMC Detects Error"]
+        gpio["GPIO Interrupt<br/>Handler"]
+    end
+
+    subgraph step3["3. Trigger Collection"]
+        crashdump["Crashdump<br/>Service"]
+    end
+
+    subgraph step4["4. Collect Data via PECI"]
+        peci["PECI Commands<br/>- RdPkgConfig<br/>- RdIAMSR<br/>- CrashDump"]
+        mca["CPU MCA Banks<br/>- MC0-MCn<br/>- Uncore MSRs<br/>- Core State"]
+        peci --> mca
+    end
+
+    subgraph step5["5. Store & Expose"]
+        json["JSON Storage<br/>/var/lib/crashdump/"]
+        redfish["Redfish API<br/>LogService"]
+        json --> redfish
+    end
+
+    cpu --> gpio
+    gpio --> crashdump
+    crashdump --> peci
+    peci --> json
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +-------------------------------------------------------------------+
 |                   Crash Dump Collection Flow                      |
@@ -412,6 +450,8 @@ Autonomous Crash Dump automatically collects CPU diagnostic data when critical e
 |     +------------------+                                          |
 +-------------------------------------------------------------------+
 ```
+
+</details>
 
 ### Build Configuration
 

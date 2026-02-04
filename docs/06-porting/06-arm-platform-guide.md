@@ -37,6 +37,33 @@ This guide covers porting OpenBMC to ARM-based server platforms, using NVIDIA's 
 
 ### Key Differences
 
+```mermaid
+---
+title: ARM vs ASPEED Architecture Comparison
+---
+flowchart TB
+    subgraph aspeed["Traditional ASPEED BMC"]
+        direction TB
+        aspeed_bmc["ASPEED BMC<br/>(AST2500/2600)"]
+        aspeed_host["x86 Host<br/>(Intel/AMD CPU)"]
+        aspeed_mgmt["BMC manages<br/>x86 platform"]
+        aspeed_bmc <-->|"LPC / eSPI"| aspeed_host
+        aspeed_bmc --> aspeed_mgmt
+    end
+
+    subgraph arm["ARM Server Platform"]
+        direction TB
+        arm_bmc["ARM BMC<br/>(Various ARM SoCs)"]
+        arm_host["ARM Host<br/>(Grace, Ampere, etc.)"]
+        arm_mgmt["BMC manages<br/>ARM platform"]
+        arm_bmc <-->|"PCIe / I2C / MCTP"| arm_host
+        arm_bmc --> arm_mgmt
+    end
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +------------------------------------------------------------------+
 |                    Traditional ASPEED BMC                        |
@@ -75,6 +102,8 @@ This guide covers porting OpenBMC to ARM-based server platforms, using NVIDIA's 
 +------------------------------------------------------------------+
 ```
 
+</details>
+
 | Aspect | ASPEED BMC | ARM Platform |
 |--------|------------|--------------|
 | **BMC SoC** | AST2500/AST2600 (ARM core) | Various ARM SoCs |
@@ -103,6 +132,28 @@ ARM platforms typically use different host-BMC communication methods:
 ARM platforms use the Yocto Project's meta-arm layer stack for base support.
 
 ### Layer Stack
+
+```mermaid
+---
+title: meta-arm Layer Stack
+---
+flowchart TB
+    platform["Your Platform Layer<br/>(meta-your-platform)"]
+    vendor["Vendor Layer (optional)<br/>(meta-nvidia, etc.)"]
+    armbsp["meta-arm-bsp<br/>(Reference platform BSPs)"]
+    metaarm["meta-arm<br/>(ARM architecture recipes)"]
+    toolchain["meta-arm-toolchain<br/>(GCC/Clang for ARM)"]
+    base["OpenBMC Base Layers<br/>(meta-phosphor, meta-openembedded, poky)"]
+
+    platform --> vendor
+    vendor --> armbsp
+    armbsp --> metaarm
+    metaarm --> toolchain
+    toolchain --> base
+```
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
 
 ```
 +------------------------------------------------------------------+
@@ -140,6 +191,8 @@ ARM platforms use the Yocto Project's meta-arm layer stack for base support.
 |         (meta-phosphor, meta-openembedded, poky)                 |
 +------------------------------------------------------------------+
 ```
+
+</details>
 
 ### Adding meta-arm to Your Build
 
@@ -322,6 +375,35 @@ ARM platforms use a standardized boot flow with Trusted Firmware-A (TF-A).
 
 ### Boot Sequence
 
+```mermaid
+---
+title: ARM Boot Flow
+---
+flowchart LR
+    bl1["BL1<br/>(ROM/Flash)"]
+    bl2["BL2<br/>(Trusted Boot)"]
+    bl31["BL31<br/>(Secure Monitor)"]
+    bl32["BL32<br/>(OP-TEE)<br/>[Optional]"]
+    bl33["BL33<br/>(U-Boot)"]
+    linux["Linux<br/>Kernel"]
+
+    bl1 --> bl2
+    bl2 --> bl31
+    bl31 --> bl32
+    bl31 --> bl33
+    bl33 --> linux
+```
+
+**Legend:**
+- **BL1** - Boot Loader Stage 1 (ROM or first-stage flash)
+- **BL2** - Trusted Boot Firmware
+- **BL31** - EL3 Runtime Firmware (Secure Monitor)
+- **BL32** - Secure Payload (OP-TEE, optional)
+- **BL33** - Non-secure Bootloader (U-Boot)
+
+<details>
+<summary>ASCII-art version (for comparison)</summary>
+
 ```
 +------------------------------------------------------------------+
 |                      ARM Boot Flow                               |
@@ -343,14 +425,9 @@ ARM platforms use a standardized boot flow with Trusted Firmware-A (TF-A).
 |  +------------+     +------------+     +------------+            |
 |                                                                  |
 +------------------------------------------------------------------+
-
-Legend:
-  BL1  - Boot Loader Stage 1 (ROM or first-stage flash)
-  BL2  - Trusted Boot Firmware
-  BL31 - EL3 Runtime Firmware (Secure Monitor)
-  BL32 - Secure Payload (OP-TEE, optional)
-  BL33 - Non-secure Bootloader (U-Boot)
 ```
+
+</details>
 
 ### Boot Components
 
