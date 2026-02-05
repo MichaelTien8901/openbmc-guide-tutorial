@@ -15,7 +15,7 @@ mermaid:
   version: "10.6.0"
 
 # Logo and favicon
-logo: "/assets/images/openbmc-logo.png"
+logo: "/assets/images/openbmc_logo.png"
 favicon_ico: "/assets/images/favicon.ico"
 
 # Search
