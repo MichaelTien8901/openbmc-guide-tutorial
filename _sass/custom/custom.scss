@@ -1,0 +1,13 @@
+// Custom styles for OpenBMC Guide Tutorial
+
+// Ensure logo has proper height
+.site-logo {
+  min-height: 40px;
+}
+
+// On larger screens, make logo bigger
+@media (min-width: 50rem) {
+  .site-logo {
+    min-height: 50px;
+  }
+}
