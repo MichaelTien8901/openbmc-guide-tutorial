@@ -65,7 +65,7 @@ All examples in this guide are tested and available in the [examples/](https://g
 
 ## Contributing
 
-Found an error? Want to add content? See our [Contributing Guide](CONTRIBUTING.md).
+Found an error? Want to add content? See our [Contributing Guide]({% link docs/contributing.md %}).
 
 ---
 
