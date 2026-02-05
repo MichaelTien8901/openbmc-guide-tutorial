@@ -2,12 +2,12 @@
 
 // Ensure logo has proper height
 .site-logo {
-  min-height: 40px;
+  min-height: 48px;
 }
 
 // On larger screens, make logo bigger
 @media (min-width: 50rem) {
   .site-logo {
-    min-height: 50px;
+    min-height: 60px;
   }
 }
