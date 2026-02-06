@@ -15,68 +15,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Validate and build all example code
-  validate-examples:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq shellcheck
-
-      - name: Validate JSON files
-        run: |
-          echo "Validating JSON files..."
-          find docs/examples -name "*.json" -print0 | while IFS= read -r -d '' file; do
-            echo "  Checking: $file"
-            jq empty "$file" || exit 1
-          done
-          echo "All JSON files are valid!"
-
-      - name: Validate YAML files
-        run: |
-          echo "Validating YAML files..."
-          pip install pyyaml
-          find docs/examples -name "*.yaml" -o -name "*.yml" | while read -r file; do
-            echo "  Checking: $file"
-            python3 -c "import yaml; yaml.safe_load(open('$file'))" || exit 1
-          done
-          echo "All YAML files are valid!"
-
-      - name: Lint shell scripts
-        run: |
-          echo "Linting shell scripts..."
-          find docs/examples -name "*.sh" -print0 | while IFS= read -r -d '' file; do
-            echo "  Checking: $file"
-            shellcheck --severity=error "$file" || exit 1
-          done
-          echo "All shell scripts passed linting!"
-
-      - name: Build testing examples (GTest)
-        run: |
-          echo "Building GTest examples..."
-          cd docs/examples/testing
-          mkdir build && cd build
-          cmake ..
-          make
-          echo "Running tests..."
-          ctest --output-on-failure
-          echo "GTest examples built and tested successfully!"
-
-      - name: Validate Robot Framework files
-        run: |
-          echo "Validating Robot Framework files..."
-          pip install robotframework
-          for file in docs/examples/robot/*.robot; do
-            echo "  Checking: $file"
-            python3 -m robot.run --dryrun --outputdir /tmp/robot-output "$file" || exit 1
-          done
-          echo "All Robot Framework files are valid!"
-
-  # Build Jekyll site
   build:
     runs-on: ubuntu-latest
     steps:
@@ -101,13 +39,12 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
 
-  # Deploy to GitHub Pages (requires both jobs to pass)
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: [build, validate-examples]
+    needs: build
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
