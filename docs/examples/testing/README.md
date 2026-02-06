@@ -6,25 +6,29 @@ Standalone GTest/GMock examples for learning OpenBMC testing patterns.
 
 ## Quick Start
 
-### Option 1: CMake (Recommended - Auto-downloads GTest)
+### Option 1: Docker (Recommended)
 
 ```bash
-cd docs/examples/testing
+./build.sh   # build with Docker
+./run.sh     # run tests
+```
+
+### Option 2: CMake (Auto-downloads GTest)
+
+```bash
 mkdir build && cd build
 cmake ..
 make
 ctest --output-on-failure
 ```
 
-### Option 2: Make (Requires GTest installed)
+### Option 3: Make (Requires GTest installed)
 
 ```bash
 # Install GTest first
 sudo apt install libgtest-dev libgmock-dev  # Ubuntu/Debian
 sudo dnf install gtest-devel gmock-devel     # Fedora
 
-# Build and run
-cd docs/examples/testing
 make
 make test
 ```

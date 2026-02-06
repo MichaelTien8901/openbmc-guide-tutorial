@@ -10,14 +10,25 @@ Example code and configurations for OpenBMC sensors.
 | `external-sensor/` | External sensor client example |
 | `sensor-reader.cpp` | D-Bus sensor reading utility |
 
-## Virtual Sensor
-
-A virtual sensor calculates values from other sensors. Example: total system power from individual PSU readings.
+## Building with Docker (Recommended)
 
 ```bash
-cd virtual-sensor
-# Build with OpenBMC SDK
-$CXX -std=c++20 virtual_sensor.cpp -o virtual_sensor $(pkg-config --cflags --libs sdbusplus)
+./build.sh        # build with Docker
+./run.sh           # run demo (starts virtual sensor, introspects it)
+./run.sh shell     # interactive shell
+```
+
+The Docker image builds sdbusplus from source and compiles both
+`sensor_reader` and `virtual_sensor`. A session D-Bus is started
+inside the container so the examples work without a real BMC.
+
+## Building with OpenBMC SDK
+
+```bash
+source /opt/openbmc-phosphor/VERSION/environment-setup-*
+
+meson setup builddir
+meson compile -C builddir
 ```
 
 ## External Sensor
@@ -26,22 +37,7 @@ External sensors allow setting sensor values from external sources (scripts, oth
 
 ```bash
 cd external-sensor
-# Run the example
 ./set_external_sensor.sh
-```
-
-## Sensor Reader
-
-A utility to read and display sensor values:
-
-```bash
-# Build
-$CXX -std=c++20 sensor_reader.cpp -o sensor_reader $(pkg-config --cflags --libs sdbusplus)
-
-# Run
-./sensor_reader temperature
-./sensor_reader voltage
-./sensor_reader all
 ```
 
 ## Entity Manager Configurations
