@@ -68,7 +68,7 @@ int main()
             return true;  // Accept the change
         },
         // Getter
-        [&counter](const int64_t& value) {
+        [&counter](const int64_t& /*value*/) {
             return counter;
         }
     );

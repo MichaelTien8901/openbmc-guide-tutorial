@@ -8,73 +8,71 @@ Examples demonstrating D-Bus communication patterns in OpenBMC.
 |-----------|-------------|
 | `client/` | D-Bus client - reading properties, calling methods |
 | `server/` | D-Bus server - exposing properties and methods |
-| `async/`  | Asynchronous D-Bus patterns with Boost.Asio |
 
-## Building
+## Building with Docker (Recommended)
 
-### With OpenBMC SDK
+No SDK or local toolchain needed — just Docker.
+
+```bash
+# Build everything
+./build.sh
+
+# Run the demo (starts server, calls methods, reads properties)
+./run.sh
+
+# Or get an interactive shell to experiment
+./run.sh shell
+```
+
+The Docker image builds sdbusplus from source and compiles both examples.
+A session D-Bus daemon is started inside the container so the examples
+run without a real BMC.
+
+### What the demo does
+
+```
+=== Starting D-Bus Server ===
+=== Introspecting Server ===
+=== Calling Increment ===
+=== Reading Counter ===
+=== Setting Counter to 42 ===
+=== Calling Add(8) ===
+=== Calling Reset ===
+Demo complete!
+```
+
+### Interactive shell
+
+```bash
+./run.sh shell
+
+# Inside the container:
+./builddir/dbus_server &
+busctl --system introspect xyz.openbmc_project.Example.Server \
+    /xyz/openbmc_project/example/server
+busctl --system call xyz.openbmc_project.Example.Server \
+    /xyz/openbmc_project/example/server \
+    xyz.openbmc_project.Example.Counter Increment
+```
+
+## Building with OpenBMC SDK
 
 ```bash
 # Source the SDK environment
 source /opt/openbmc-phosphor/VERSION/environment-setup-*
 
-# Build client
-cd client
-$CXX -std=c++20 dbus_client.cpp -o dbus_client \
-    $(pkg-config --cflags --libs sdbusplus)
-
-# Build server
-cd ../server
-$CXX -std=c++20 dbus_server.cpp -o dbus_server \
-    $(pkg-config --cflags --libs sdbusplus)
+# Build with meson
+meson setup builddir
+meson compile -C builddir
 ```
 
-### On Target BMC
+## Building on Target BMC
 
 Copy the source files to the BMC and compile:
 
 ```bash
-# On the BMC
-g++ -std=c++20 dbus_client.cpp -o dbus_client -lsdbusplus
-g++ -std=c++20 dbus_server.cpp -o dbus_server -lsdbusplus -lboost_system
-```
-
-## Running
-
-### Client Example
-
-```bash
-# On BMC or QEMU
-./dbus_client
-
-# Expected output:
-# Connected to D-Bus system bus
-# === Reading Host State ===
-# Current Host State: xyz.openbmc_project.State.Host.HostState.Off
-# ...
-```
-
-### Server Example
-
-```bash
-# Terminal 1: Start the server
-./dbus_server
-
-# Terminal 2: Interact with the server
-busctl introspect xyz.openbmc_project.Example.Server \
-    /xyz/openbmc_project/example/server
-
-busctl get-property xyz.openbmc_project.Example.Server \
-    /xyz/openbmc_project/example/server \
-    xyz.openbmc_project.Example.Counter Counter
-
-busctl call xyz.openbmc_project.Example.Server \
-    /xyz/openbmc_project/example/server \
-    xyz.openbmc_project.Example.Counter Increment
-
-busctl set-property xyz.openbmc_project.Example.Server \
-    /xyz/openbmc_project/example/server \
-    xyz.openbmc_project.Example.Counter Counter x 100
+g++ -std=c++23 dbus_client.cpp -o dbus_client -lsdbusplus
+g++ -std=c++23 dbus_server.cpp -o dbus_server -lsdbusplus -lboost_system
 ```
 
 ## Key Concepts Demonstrated
@@ -105,23 +103,26 @@ busctl set-property xyz.openbmc_project.Example.Server \
 
 ## Troubleshooting
 
+### Docker build fails at sdbusplus
+
+If sdbusplus build fails, it may be due to API changes upstream. Try pinning
+to a known-good commit by editing the `git clone` line in `Dockerfile`:
+
+```dockerfile
+RUN git clone --depth 1 --branch v1.0.0 https://github.com/openbmc/sdbusplus ...
+```
+
 ### "Connection refused" or "No such service"
 
 Ensure you're running on a system with the D-Bus daemon:
+- Docker container (via `./run.sh`)
 - Real BMC hardware
 - QEMU emulator
-- System with systemd and dbus-daemon
 
 ### "Permission denied"
 
 D-Bus policies may restrict access. On BMC, run as root.
-
-### Build errors about missing headers
-
-Ensure the SDK is properly sourced and pkg-config can find sdbusplus:
-```bash
-pkg-config --cflags --libs sdbusplus
-```
+In Docker, the entrypoint uses a session bus so no root is needed.
 
 ## Related Documentation
 
