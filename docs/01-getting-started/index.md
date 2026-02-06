@@ -23,36 +23,46 @@ This section covers everything you need to start developing with OpenBMC.
 {: .tip }
 **QEMU is the standard development environment for OpenBMC** — not a compromise or simulation fallback. Professional OpenBMC developers at Google, Meta, IBM, and other companies use QEMU daily for most development work.
 
-### Why QEMU is the Right Choice
+### Feature Comparison: QEMU vs Raspberry Pi vs Real Hardware
 
-| What QEMU Provides | Coverage |
-|-------------------|----------|
-| Full OpenBMC software stack | ✅ 100% |
-| D-Bus architecture and all services | ✅ 100% |
-| Redfish API (bmcweb) | ✅ 100% |
-| IPMI interface (ipmitool works) | ✅ 100% |
-| Yocto/BitBake build system | ✅ 100% |
-| Code modification and testing | ✅ 100% |
-| Sensor/fan/power state management | ✅ Simulated |
+| Feature | QEMU (ASPEED) | Raspberry Pi | ASPEED AST2600 EVB |
+|---------|---------------|--------------|---------------------|
+| OpenBMC software stack | ✅ Full | ✅ Full | ✅ Full |
+| D-Bus services | ✅ Full | ✅ Full | ✅ Full |
+| Redfish API (bmcweb) | ✅ Full | ✅ Full | ✅ Full |
+| Yocto/BitBake build | ✅ Full | ✅ Full | ✅ Full |
+| I2C sensors (tmp105, EEPROMs) | ✅ Well emulated | ❌ No ASPEED I2C | ✅ Hardware |
+| SPI flash (boot, firmware) | ✅ Well emulated | ❌ SD card boot | ✅ Hardware |
+| GPIO (pins, interrupts) | ✅ Functional | ⚠️ Limited | ✅ Hardware |
+| ADC (analog sensors) | ⚠️ Synthetic values | ❌ No built-in ADC | ✅ Hardware |
+| IPMI KCS/BT interface | ⚠️ Partial | ❌ Not available | ✅ Hardware |
+| PECI (CPU temperature) | ⚠️ Stub only | ❌ Not available | ✅ Hardware |
+| PWM / fan tachometer | ⚠️ Register stub | ❌ Not available | ✅ Hardware |
+| KVM-over-IP (video) | ❌ Not emulated | ❌ Not available | ✅ Hardware |
+| eSPI host interface | ❌ Not emulated | ❌ Not available | ✅ Hardware |
+| Secure Boot (RoT) | ⚠️ Basic OTP only | ❌ Not available | ✅ Hardware |
+| **Cost** | **Free** | **$35-75** | **$500-800** |
 
 ### What Requires Real Hardware
 
 Only specialized hardware bring-up tasks need physical BMC hardware:
 
+- KVM-over-IP video capture and encoding
 - eSPI/LPC host interface debugging
-- PECI CPU communication
-- Real sensor calibration
+- PECI CPU temperature monitoring with real data
+- Real fan control with PWM and tachometer feedback
+- Real analog sensor calibration
 - Platform-specific GPIO timing
 
 These topics are relevant only for hardware engineers doing board bring-up — not for learning OpenBMC software development.
 
-### Hardware Cost Reality
+### Recommendation
 
-| Option | Cost | Practicality |
-|--------|------|--------------|
-| **QEMU** | Free | ✅ Best for learning and development |
-| ASPEED AST2600 EVB | $500-800 | ❌ Too expensive for most |
-| Raspberry Pi | $35-75 | ❌ Cannot run OpenBMC (wrong SoC) |
+| Option | Cost | Best For |
+|--------|------|----------|
+| **QEMU** | Free | ✅ Learning and software development — start here |
+| Raspberry Pi | $35-75 | ⚠️ Exploring the software stack on real hardware, but no BMC peripherals |
+| ASPEED AST2600 EVB | $500-800 | Full hardware bring-up and production development |
 
 ## Prerequisites
 
