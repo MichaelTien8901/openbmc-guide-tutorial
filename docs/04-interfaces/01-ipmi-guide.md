@@ -924,7 +924,7 @@ Key implementation files in [phosphor-host-ipmid](https://github.com/openbmc/pho
 
 ## Examples
 
-Working examples are available in the [examples/ipmi](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/ipmi) directory:
+Working examples are available in the [examples/ipmi](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/ipmi) directory:
 
 - `oem_handler.cpp` - OEM IPMI command handler
 - `oem_handler.hpp` - OEM handler header

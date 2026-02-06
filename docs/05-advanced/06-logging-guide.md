@@ -887,7 +887,7 @@ Key implementation files in [phosphor-logging](https://github.com/openbmc/phosph
 
 ## Examples
 
-Working examples are available in the [examples/logging](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/logging) directory:
+Working examples are available in the [examples/logging](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/logging) directory:
 
 - `create-event.sh` - Create SEL/Event log entries
 - `query-logs.sh` - Query and filter log entries

@@ -18,7 +18,7 @@ This directory contains example configuration files for enabling Linux debugging
 Copy `asan-local.conf` contents to your `build/conf/local.conf`:
 
 ```bash
-cat examples/debug/asan-local.conf >> build/conf/local.conf
+cat docs/examples/debug/asan-local.conf >> build/conf/local.conf
 bitbake obmc-phosphor-image
 ```
 

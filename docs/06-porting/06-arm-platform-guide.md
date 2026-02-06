@@ -568,7 +568,7 @@ See the [MCTP/PLDM Guide]({% link docs/05-advanced/01-mctp-pldm-guide.md %}) for
 
 ## Example ARM Machine Layer
 
-Working examples are available in the [examples/porting/meta-arm-example](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/porting/meta-arm-example) directory:
+Working examples are available in the [examples/porting/meta-arm-example](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/porting/meta-arm-example) directory:
 
 - `conf/machine/` - ARM-specific machine configuration template
 - `recipes-kernel/` - Kernel customization for ARM platforms

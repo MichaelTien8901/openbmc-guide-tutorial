@@ -57,7 +57,7 @@ Not sure where to start? We have [curated learning paths]({% link docs/learning-
 
 ## Sample Code
 
-All examples in this guide are tested and available in the [examples/](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples) directory. Each example includes:
+All examples in this guide are tested and available in the [examples/](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples) directory. Each example includes:
 
 - Complete, buildable code
 - README with setup instructions

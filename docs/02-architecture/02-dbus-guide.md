@@ -515,7 +515,7 @@ busctl introspect <service> <object> | grep interface
 
 ## Examples
 
-Working examples are available in the [examples/dbus](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/dbus) directory:
+Working examples are available in the [examples/dbus](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/dbus) directory:
 
 - `client/` - D-Bus client examples
 - `server/` - D-Bus server/service examples

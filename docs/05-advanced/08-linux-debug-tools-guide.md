@@ -1387,7 +1387,7 @@ This section provides detailed technical information for developers who want to 
 
 ## Examples
 
-Working examples are available in the [examples/debug](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/debug) directory:
+Working examples are available in the [examples/debug](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/debug) directory:
 
 - `asan-local.conf` - AddressSanitizer local.conf configuration
 - `kernel-debug.cfg` - Kernel debug options configuration

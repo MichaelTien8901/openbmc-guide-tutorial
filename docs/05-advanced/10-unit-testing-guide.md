@@ -555,7 +555,7 @@ Build and run the example tests from this tutorial:
 ```bash
 # Clone the tutorial repository
 git clone https://github.com/MichaelTien8901/openbmc-guide-tutorial.git
-cd openbmc-guide-tutorial/examples/testing
+cd openbmc-guide-tutorial/docs/examples/testing
 
 # Option 1: CMake (auto-downloads GTest)
 mkdir build && cd build

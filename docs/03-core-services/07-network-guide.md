@@ -821,7 +821,7 @@ Key implementation files in [phosphor-networkd](https://github.com/openbmc/phosp
 
 ## Examples
 
-Working examples are available in the [examples/network](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/network) directory:
+Working examples are available in the [examples/network](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/network) directory:
 
 - `network-config.sh` - Network configuration script
 - `vlan-setup.sh` - VLAN configuration script

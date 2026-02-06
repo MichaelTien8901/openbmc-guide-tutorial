@@ -100,7 +100,7 @@ Step-by-step instructions:
 
 ## Code Examples
 
-Link to examples in the `examples/` directory.
+Link to examples in the `docs/examples/` directory.
 
 ## Troubleshooting
 
@@ -166,7 +166,7 @@ Use **tables** for structured data and **numbered lists** for sequential steps.
 
 ## Adding Code Examples
 
-1. Create a directory under `examples/<category>/`
+1. Create a directory under `docs/examples/<category>/`
 2. Include:
    - Complete, buildable source code
    - `README.md` with build/test instructions
@@ -176,7 +176,7 @@ Use **tables** for structured data and **numbered lists** for sequential steps.
 ### Example Directory Structure
 
 ```
-examples/
+docs/examples/
 ├── sensors/
 │   ├── README.md
 │   ├── meson.build

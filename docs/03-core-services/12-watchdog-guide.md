@@ -511,7 +511,7 @@ Key implementation files in [phosphor-watchdog](https://github.com/openbmc/phosp
 
 ## Examples
 
-Working examples are available in the [examples/watchdog](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/examples/watchdog) directory:
+Working examples are available in the [examples/watchdog](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/watchdog) directory:
 
 - `watchdog-config.json` - Watchdog timer configuration
 - `watchdog-test.sh` - Test script for watchdog functionality

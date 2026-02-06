@@ -9,7 +9,7 @@ Standalone GTest/GMock examples for learning OpenBMC testing patterns.
 ### Option 1: CMake (Recommended - Auto-downloads GTest)
 
 ```bash
-cd examples/testing
+cd docs/examples/testing
 mkdir build && cd build
 cmake ..
 make
@@ -24,7 +24,7 @@ sudo apt install libgtest-dev libgmock-dev  # Ubuntu/Debian
 sudo dnf install gtest-devel gmock-devel     # Fedora
 
 # Build and run
-cd examples/testing
+cd docs/examples/testing
 make
 make test
 ```
