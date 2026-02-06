@@ -33,7 +33,7 @@ title: User Manager Architecture
 ---
 flowchart TB
     subgraph access["Access Methods"]
-        direction LR
+        direction TB
         redfish["Redfish API"]
         ipmi["IPMI Users"]
         ssh["SSH Login"]
@@ -43,7 +43,7 @@ flowchart TB
     access --> usermgr
 
     subgraph usermgr["phosphor-user-manager"]
-        direction LR
+        direction TB
         local["Local Accounts<br/>/etc/passwd"]
         ldap["LDAP/AD Config<br/>nslcd/sssd"]
         priv["Privilege<br/>Management"]

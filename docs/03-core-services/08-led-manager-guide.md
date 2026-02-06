@@ -33,7 +33,7 @@ title: LED Architecture
 ---
 flowchart TB
     subgraph access["Access Methods"]
-        direction LR
+        direction TB
         redfish["Redfish<br/>Indicator"]
         ipmi["IPMI<br/>Identify"]
         dbus["D-Bus<br/>busctl"]
@@ -41,7 +41,7 @@ flowchart TB
     end
 
     subgraph manager["phosphor-led-manager"]
-        direction LR
+        direction TB
         groups["LED Groups<br/>(logical)"]
         actions["LED Actions<br/>(on/off/blink)"]
         lamptest["Lamp Test<br/>(all LEDs)"]
