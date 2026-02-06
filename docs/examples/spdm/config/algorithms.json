@@ -1,0 +1,25 @@
+{
+    "version": "1.2",
+    "baseAsymAlgo": [
+        "ECDSA_P384",
+        "ECDSA_P256",
+        "RSASSA_3072"
+    ],
+    "baseHashAlgo": [
+        "SHA2_384",
+        "SHA2_256"
+    ],
+    "measurementHashAlgo": [
+        "SHA2_384",
+        "SHA2_256"
+    ],
+    "dheNamedGroup": [
+        "SECP_384_R1",
+        "SECP_256_R1"
+    ],
+    "aead": [
+        "AES_256_GCM",
+        "CHACHA20_POLY1305"
+    ],
+    "keySchedule": "SPDM"
+}

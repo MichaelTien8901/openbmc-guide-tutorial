@@ -1,0 +1,74 @@
+{
+    "entries": [
+        {
+            "type": "terminusLocator",
+            "data": {
+                "terminusHandle": 1,
+                "validity": "valid",
+                "tid": 1,
+                "containerID": 0,
+                "terminusLocatorType": "mctp_eid",
+                "terminusLocatorValue": 8
+            }
+        },
+        {
+            "type": "numericSensor",
+            "data": {
+                "sensorID": 1,
+                "entityType": 66,
+                "entityInstanceNumber": 0,
+                "baseUnit": 2,
+                "unitModifier": 0,
+                "rateUnit": 0,
+                "warningHigh": 85.0,
+                "criticalHigh": 95.0,
+                "fatalHigh": 105.0,
+                "sensorName": "CPU0_Temp"
+            }
+        },
+        {
+            "type": "numericSensor",
+            "data": {
+                "sensorID": 2,
+                "entityType": 66,
+                "entityInstanceNumber": 1,
+                "baseUnit": 2,
+                "unitModifier": 0,
+                "rateUnit": 0,
+                "warningHigh": 85.0,
+                "criticalHigh": 95.0,
+                "fatalHigh": 105.0,
+                "sensorName": "CPU1_Temp"
+            }
+        },
+        {
+            "type": "stateSensor",
+            "data": {
+                "sensorID": 5,
+                "entityType": 66,
+                "entityInstanceNumber": 0,
+                "stateSetID": 196,
+                "possibleStates": [1, 2, 3],
+                "sensorName": "BootProgress"
+            }
+        },
+        {
+            "type": "entityAssociation",
+            "data": {
+                "containerEntityType": 11,
+                "containerEntityInstanceNumber": 0,
+                "associationType": "physicalContainment",
+                "containedEntities": [
+                    {
+                        "entityType": 66,
+                        "entityInstanceNumber": 0
+                    },
+                    {
+                        "entityType": 66,
+                        "entityInstanceNumber": 1
+                    }
+                ]
+            }
+        }
+    ]
+}

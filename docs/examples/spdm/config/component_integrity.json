@@ -1,0 +1,49 @@
+{
+    "@odata.id": "/redfish/v1/ComponentIntegrity/GPU_0",
+    "@odata.type": "#ComponentIntegrity.v1_2_0.ComponentIntegrity",
+    "Id": "GPU_0",
+    "Name": "GPU 0 Integrity",
+    "ComponentIntegrityType": "SPDM",
+    "ComponentIntegrityTypeVersion": "1.2.0",
+    "TargetComponentURI": "/redfish/v1/Systems/system/Processors/GPU_0",
+    "LastUpdated": "2024-01-15T10:30:00Z",
+    "SPDM": {
+        "Requester": {
+            "IdentityAuthentication": "Success",
+            "HardwareIntrusion": "Normal"
+        },
+        "IdentityAuthentication": {
+            "ResponderAuthentication": "Success",
+            "VerificationStatus": "Success",
+            "ComponentCertificate": {
+                "@odata.id": "/redfish/v1/ComponentIntegrity/GPU_0/Certificates/0"
+            }
+        },
+        "MeasurementSet": {
+            "MeasurementSpecification": "DMTF",
+            "MeasurementHashAlgorithm": "SHA384",
+            "Measurements": [
+                {
+                    "MeasurementIndex": 1,
+                    "Measurement": "abc123def456...",
+                    "MeasurementType": "MutableFirmware",
+                    "LastUpdated": "2024-01-15T10:30:00Z",
+                    "SecurityVersionNumber": "1",
+                    "VerificationStatus": "Success"
+                },
+                {
+                    "MeasurementIndex": 2,
+                    "Measurement": "789abc012def...",
+                    "MeasurementType": "FirmwareConfiguration",
+                    "LastUpdated": "2024-01-15T10:30:00Z",
+                    "VerificationStatus": "Success"
+                }
+            ]
+        }
+    },
+    "Actions": {
+        "#ComponentIntegrity.SPDMGetSignedMeasurements": {
+            "target": "/redfish/v1/ComponentIntegrity/GPU_0/Actions/ComponentIntegrity.SPDMGetSignedMeasurements"
+        }
+    }
+}

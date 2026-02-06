@@ -1,0 +1,26 @@
+{
+    "deviceType": "GPU",
+    "vendorId": "0x10DE",
+    "measurements": {
+        "1": {
+            "type": "MutableFirmware",
+            "expectedHash": "sha384:abc123def456789...",
+            "description": "GPU firmware v2.1.0"
+        },
+        "2": {
+            "type": "FirmwareConfig",
+            "expectedHash": "sha384:789abc012def345...",
+            "description": "Factory configuration"
+        },
+        "3": {
+            "type": "MutableFirmwareVersion",
+            "expectedValue": "v2.1.0",
+            "description": "Firmware version string"
+        }
+    },
+    "policy": {
+        "requireAllMeasurements": true,
+        "actionOnMismatch": "log_and_alert",
+        "allowFirmwareUpdate": true
+    }
+}
