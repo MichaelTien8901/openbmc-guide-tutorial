@@ -10,7 +10,7 @@ Example configurations for phosphor-networkd.
 
 ## Related Guide
 
-[Network Guide](../../docs/03-core-services/07-network-guide.md)
+[Network Guide](../../03-core-services/07-network-guide.md)
 
 ## Quick Test
 

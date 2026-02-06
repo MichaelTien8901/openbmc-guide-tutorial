@@ -73,5 +73,5 @@ SRC_URI += "file://kernel-debug.cfg"
 
 ## Related Documentation
 
-- [Linux Debug Tools Guide](../../docs/05-advanced/08-linux-debug-tools-guide.md)
-- [Environment Setup Guide](../../docs/01-getting-started/02-environment-setup.md)
+- [Linux Debug Tools Guide](../../05-advanced/08-linux-debug-tools-guide.md)
+- [Environment Setup Guide](../../01-getting-started/02-environment-setup.md)

@@ -126,5 +126,5 @@ with its NetFn, command code, and required privilege level.
 
 ## Related Documentation
 
-- [IPMI Guide](../../docs/04-interfaces/01-ipmi-guide.md)
+- [IPMI Guide](../../04-interfaces/01-ipmi-guide.md)
 - [phosphor-host-ipmid](https://github.com/openbmc/phosphor-host-ipmid)

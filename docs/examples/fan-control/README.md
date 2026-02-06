@@ -82,5 +82,5 @@ echo 200 > /sys/class/hwmon/hwmon0/pwm1
 
 ## Related Documentation
 
-- [Fan Control Guide](../../docs/03-core-services/04-fan-control-guide.md)
+- [Fan Control Guide](../../03-core-services/04-fan-control-guide.md)
 - [phosphor-pid-control](https://github.com/openbmc/phosphor-pid-control)

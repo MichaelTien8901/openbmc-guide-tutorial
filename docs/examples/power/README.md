@@ -65,5 +65,5 @@ busctl tree xyz.openbmc_project.PSUSensor
 
 ## Related Documentation
 
-- [Power Management Guide](../../docs/03-core-services/05-power-management-guide.md)
-- [State Manager Guide](../../docs/02-architecture/03-state-manager-guide.md)
+- [Power Management Guide](../../03-core-services/05-power-management-guide.md)
+- [State Manager Guide](../../02-architecture/03-state-manager-guide.md)

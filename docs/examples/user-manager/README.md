@@ -10,7 +10,7 @@ Example configurations for phosphor-user-manager.
 
 ## Related Guide
 
-[User Manager Guide](../../docs/03-core-services/06-user-manager-guide.md)
+[User Manager Guide](../../03-core-services/06-user-manager-guide.md)
 
 ## Quick Test
 

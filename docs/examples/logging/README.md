@@ -11,7 +11,7 @@ Example configurations and scripts for phosphor-logging.
 
 ## Related Guide
 
-[Logging Guide](../../docs/05-advanced/06-logging-guide.md)
+[Logging Guide](../../05-advanced/06-logging-guide.md)
 
 ## Quick Test
 

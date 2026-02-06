@@ -155,6 +155,6 @@ meson test -C builddir -v
 
 ## Related Documentation
 
-- [Unit Testing Guide](/docs/05-advanced/10-unit-testing-guide.html)
-- [Robot Framework Guide](/docs/05-advanced/11-robot-framework-guide.html)
+- [Unit Testing Guide](../../05-advanced/10-unit-testing-guide.md)
+- [Robot Framework Guide](../../05-advanced/11-robot-framework-guide.md)
 - [Google Test Documentation](https://google.github.io/googletest/)

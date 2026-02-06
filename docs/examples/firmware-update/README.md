@@ -9,7 +9,7 @@ Example scripts for firmware update operations.
 
 ## Related Guide
 
-[Firmware Update Guide](../../docs/05-advanced/03-firmware-update-guide.md)
+[Firmware Update Guide](../../05-advanced/03-firmware-update-guide.md)
 
 ## Quick Test
 

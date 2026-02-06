@@ -46,6 +46,6 @@ See `../entity-manager/` for sensor configuration examples.
 
 ## Related Documentation
 
-- [D-Bus Sensors Guide](../../docs/03-core-services/01-dbus-sensors-guide.md)
-- [Hwmon Sensors Guide](../../docs/03-core-services/02-hwmon-sensors-guide.md)
-- [Entity Manager Guide](../../docs/03-core-services/03-entity-manager-guide.md)
+- [D-Bus Sensors Guide](../../03-core-services/01-dbus-sensors-guide.md)
+- [Hwmon Sensors Guide](../../03-core-services/02-hwmon-sensors-guide.md)
+- [Entity Manager Guide](../../03-core-services/03-entity-manager-guide.md)

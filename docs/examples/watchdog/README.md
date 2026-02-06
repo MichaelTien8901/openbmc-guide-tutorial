@@ -10,7 +10,7 @@ Example configurations for phosphor-watchdog.
 
 ## Related Guide
 
-[Watchdog Guide](../../docs/03-core-services/12-watchdog-guide.md)
+[Watchdog Guide](../../03-core-services/12-watchdog-guide.md)
 
 ## Quick Test
 

@@ -10,7 +10,7 @@ Example configurations and code for phosphor-led-manager.
 
 ## Related Guide
 
-[LED Manager Guide](../../docs/03-core-services/08-led-manager-guide.md)
+[LED Manager Guide](../../03-core-services/08-led-manager-guide.md)
 
 ## Quick Test
 

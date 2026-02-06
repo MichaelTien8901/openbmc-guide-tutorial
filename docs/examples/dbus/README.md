@@ -126,6 +126,6 @@ In Docker, the entrypoint uses a session bus so no root is needed.
 
 ## Related Documentation
 
-- [D-Bus Guide](../../docs/02-architecture/02-dbus-guide.md)
+- [D-Bus Guide](../../02-architecture/02-dbus-guide.md)
 - [sdbusplus Repository](https://github.com/openbmc/sdbusplus)
 - [phosphor-dbus-interfaces](https://github.com/openbmc/phosphor-dbus-interfaces)

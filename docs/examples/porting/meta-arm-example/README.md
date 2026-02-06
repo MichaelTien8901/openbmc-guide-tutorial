@@ -108,8 +108,8 @@ Key sections to customize:
 
 ## References
 
-- [ARM Platform Guide](../../docs/06-porting/06-arm-platform-guide.md)
-- [Porting Reference](../../docs/06-porting/01-porting-reference.md)
+- [ARM Platform Guide](../../../06-porting/06-arm-platform-guide.md)
+- [Porting Reference](../../../06-porting/01-porting-reference.md)
 - [meta-arm Layer](https://git.yoctoproject.org/meta-arm)
 - [NVIDIA OpenBMC](https://github.com/NVIDIA/openbmc)
 

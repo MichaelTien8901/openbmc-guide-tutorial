@@ -73,6 +73,6 @@ xdg-open report.html
 
 ## Related Documentation
 
-- [Robot Framework Guide](/docs/05-advanced/11-robot-framework-guide.html)
-- [Unit Testing Guide](/docs/05-advanced/10-unit-testing-guide.html)
+- [Robot Framework Guide](../../05-advanced/11-robot-framework-guide.md)
+- [Unit Testing Guide](../../05-advanced/10-unit-testing-guide.md)
 - [openbmc-test-automation Repository](https://github.com/openbmc/openbmc-test-automation)
