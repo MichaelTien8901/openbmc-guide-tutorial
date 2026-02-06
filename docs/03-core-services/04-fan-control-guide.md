@@ -373,51 +373,175 @@ Configuration is done via JSON files loaded by Entity Manager or directly in `/u
 
 ---
 
+## Configuration Methods
+
+phosphor-pid-control supports two ways to load its configuration:
+
+| Method | Config Location | When to Use |
+|--------|----------------|-------------|
+| **Direct JSON** | `/usr/share/swampd/config.json` | Simple systems, single board, quick prototyping |
+| **Entity Manager** | `/usr/share/entity-manager/configurations/*.json` | Multi-board support, dynamic hardware detection |
+
+### Direct JSON
+
+Place a `config.json` in `/usr/share/swampd/` (see [zone-config.json](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/fan-control/zone-config.json) for a complete example). This file defines sensors, zones, and PIDs in a single flat structure.
+
+The direct JSON format includes `sensors` (D-Bus paths for temperature and fan tach), `zones`, and `pid` arrays. phosphor-pid-control reads this file at startup.
+
+### Entity Manager (Recommended)
+
+Entity Manager is the preferred method for production systems. It separates hardware description from thermal policy and supports multiple board configurations.
+
+**How it works:**
+
+1. Entity Manager scans JSON files in `/usr/share/entity-manager/configurations/`
+2. Each file has a `"Probe"` field that determines **when** the config applies (e.g., only when a specific board is detected via FRU data or GPIO)
+3. When the probe matches, Entity Manager exposes the configuration on D-Bus
+4. phosphor-pid-control reads its PID/zone config from D-Bus (not from the JSON file directly)
+
+```
+JSON file in configurations/     Entity Manager         phosphor-pid-control
+┌──────────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│ Probe: "board match" │────>│ Evaluates probe  │     │                 │
+│ Exposes:             │     │ If match:        │     │ Reads PID config│
+│   - Pid.Zone         │     │   publishes to   │────>│ from D-Bus      │
+│   - Pid (temp)       │     │   D-Bus          │     │ Starts control  │
+│   - Pid (fan)        │     │                  │     │ loop            │
+└──────────────────────┘     └──────────────────┘     └─────────────────┘
+```
+
 ## Entity Manager Integration
 
-Configure fan control through Entity Manager JSON:
+### Where to Put the JSON File
+
+The Entity Manager configuration file goes in your machine layer:
+
+```bash
+# In your Yocto layer
+meta-myplatform/
+  recipes-phosphor/
+    configuration/
+      entity-manager/
+        files/
+          my-board-fan-control.json    # <-- your fan config
+        entity-manager_%.bbappend
+
+# bbappend to install the config
+cat > entity-manager_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://my-board-fan-control.json"
+
+do_install:append() {
+    install -d ${D}${datadir}/entity-manager/configurations
+    install -m 0444 ${WORKDIR}/my-board-fan-control.json \
+        ${D}${datadir}/entity-manager/configurations/
+}
+EOF
+```
+
+On the BMC filesystem, the file ends up at:
+```
+/usr/share/entity-manager/configurations/my-board-fan-control.json
+```
+
+### The Probe Field
+
+The `"Probe"` field tells Entity Manager **when** to activate this configuration. Common patterns:
+
+```json
+// Always active (useful for development/QEMU)
+"Probe": "TRUE"
+
+// Match a specific board by FRU product name
+"Probe": "xyz.openbmc_project.FruDevice({'PRODUCT_PRODUCT_NAME': 'MyServer'})"
+
+// Match by board ID GPIO
+"Probe": "xyz.openbmc_project.Inventory.Decorator.Asset({'Model': 'X123'})"
+```
+
+### Complete Entity Manager Fan Config
+
+A single JSON file defines the zone, thermal PIDs, and fan PIDs together. See [entity-manager-fan.json](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/fan-control/entity-manager-fan.json) for the full working example.
+
+The key `Exposes` entries:
+
+**Zone definition** — sets minimum fan speed and failsafe behavior:
 
 ```json
 {
-    "Name": "FanControl",
+    "Name": "Zone 0",
     "Type": "Pid.Zone",
-    "Probe": "TRUE",
-
-    "Exposes": [
-        {
-            "Name": "Zone 0",
-            "Type": "Pid.Zone",
-            "MinThermalOutput": 25.0,
-            "FailSafePercent": 100.0
-        }
-    ]
+    "MinThermalOutput": 25.0,
+    "FailSafePercent": 100.0
 }
 ```
 
-### Thermal PID via Entity Manager
+**Thermal PID** (`Class: "temp"`) — controls fan speed based on temperature:
 
 ```json
 {
-    "Exposes": [
-        {
-            "Name": "CPU PID",
-            "Type": "Pid",
-            "Class": "temp",
-            "Inputs": ["CPU_Temp"],
-            "SetPoint": 80.0,
-            "Zones": [0],
-            "PIDGains": {
-                "P": 0.0,
-                "I": -0.2,
-                "D": 0.0,
-                "FF": 0.0,
-                "ILimit": [0, 100],
-                "OutLimit": [25, 100],
-                "SlewRate": [0, 0]
-            }
-        }
-    ]
+    "Name": "CPU Thermal PID",
+    "Type": "Pid",
+    "Class": "temp",
+    "Inputs": ["CPU_Temp"],
+    "SetPoint": 80.0,
+    "Zones": ["Zone 0"],
+    "PIDGains": {
+        "P": 0.0,
+        "I": -0.2,
+        "D": 0.0,
+        "FF": 0.0,
+        "ILimitMin": 0.0,
+        "ILimitMax": 100.0,
+        "OutLimitMin": 25.0,
+        "OutLimitMax": 100.0,
+        "SlewNeg": 5.0,
+        "SlewPos": 10.0
+    }
 }
+```
+
+**Fan PID** (`Class: "fan"`) — converts zone PWM% to actual fan RPM using feed-forward:
+
+```json
+{
+    "Name": "Fan0 PID",
+    "Type": "Pid",
+    "Class": "fan",
+    "Inputs": ["Fan0"],
+    "SetPoint": 7000.0,
+    "Zones": ["Zone 0"],
+    "PIDGains": {
+        "P": 0.0,
+        "I": 0.0,
+        "D": 0.0,
+        "FF": 1.0,
+        "ILimitMin": 0.0,
+        "ILimitMax": 100.0,
+        "OutLimitMin": 0.0,
+        "OutLimitMax": 100.0,
+        "SlewNeg": 0.0,
+        "SlewPos": 0.0
+    }
+}
+```
+
+{: .note }
+> The `Class` field is critical: `"temp"` PIDs calculate desired fan speed from temperature readings; `"fan"` PIDs translate the zone's requested RPM into actual PWM output. A complete config needs **both** types.
+
+### Verify on Running System
+
+After deploying the config and rebooting:
+
+```bash
+# Check Entity Manager loaded the config
+busctl tree xyz.openbmc_project.EntityManager | grep -i pid
+
+# Check phosphor-pid-control is using the config
+journalctl -u phosphor-pid-control | head -20
+
+# Verify zones are active
+busctl tree xyz.openbmc_project.State.FanCtrl
 ```
 
 ---
