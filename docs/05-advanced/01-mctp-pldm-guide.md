@@ -1391,6 +1391,22 @@ systemctl status pldmd mctpd
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/mctp-pldm](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/mctp-pldm) directory:
+
+- `mctp_health_check.sh` - Verify MCTP/PLDM stack connectivity
+- `pldm_discovery.sh` - Discover and characterize PLDM endpoints
+- `pldm_sensors.sh` - Read numeric and state sensors
+- `pldm_pdr_dump.sh` - Dump Platform Descriptor Records
+- `pldm_bios.sh` - Read BIOS tables and attributes (Type 3)
+- `pldm_fwupdate.sh` - Query firmware update capabilities (Type 5)
+- `config/static-endpoints.json` - Static MCTP endpoint configuration
+- `config/pdr.json` - PDR repository definition
+- `config/pldm-dbus.conf` - D-Bus access policy for PLDM
+
+---
+
 ## References
 
 ### DMTF Specifications

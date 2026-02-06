@@ -984,6 +984,17 @@ Key implementation files in [phosphor-state-manager](https://github.com/openbmc/
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/power](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/power) directory:
+
+- `power-sequencer.sh` - Power sequencer control script
+- `power-config.json` - Power supply configuration
+- `psu-entity-manager.json` - PSU entity manager configuration
+- `regulators-config.json` - Voltage regulator configuration
+
+---
+
 ## References
 
 - [phosphor-state-manager](https://github.com/openbmc/phosphor-state-manager)

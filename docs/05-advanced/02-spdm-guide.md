@@ -1279,6 +1279,20 @@ systemctl disable spdmd
 
 ---
 
+## Examples
+
+Working examples are available in the [examples/spdm](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/spdm) directory:
+
+- `spdm_cert_setup.sh` - Generate test certificate chain (Root CA / Intermediate / BMC)
+- `spdm_auth.sh` - Full SPDM authentication flow (version, capabilities, certs, challenge)
+- `spdm_measurements.sh` - Collect and verify firmware measurements
+- `spdm_redfish.sh` - Query Redfish ComponentIntegrity endpoints
+- `config/algorithms.json` - Crypto algorithm preferences
+- `config/gpu_expected.json` - Expected measurement policy for attestation
+- `config/component_integrity.json` - Example Redfish ComponentIntegrity response
+
+---
+
 ## References
 
 - [DMTF DSP0274 - SPDM Specification](https://www.dmtf.org/dsp/DSP0274) - Official SPDM protocol specification
