@@ -552,7 +552,18 @@ curl -k -u root:0penBmc -X POST \
 
 ## Custom Event Log Example
 
-### Define Error Type
+### Where to Put Error Definitions
+
+Custom error definitions live alongside your service code, following the
+phosphor-dbus-interfaces YAML format:
+
+| File | Path Convention | Description |
+|------|----------------|-------------|
+| Error YAML | `<your-repo>/xyz/openbmc_project/MyService/MyError.errors.yaml` | Error type definitions |
+| Metadata YAML | `<your-repo>/xyz/openbmc_project/MyService/MyError.metadata.yaml` | Additional data fields |
+| Generated header | `<build-dir>/xyz/openbmc_project/MyService/error.hpp` | Auto-generated C++ header |
+
+### Step 1: Define Error Type
 
 ```yaml
 # xyz/openbmc_project/MyService/MyError.errors.yaml
@@ -565,17 +576,20 @@ curl -k -u root:0penBmc -X POST \
       type: int32
 ```
 
-### Generate Code
+### Step 2: Add to Meson Build
 
-```bash
-# In meson.build
+```python
+# In meson.build of your service
+phosphor_logging_dep = dependency('phosphor-logging')
+
+# Generate error headers from YAML
 error_yaml = files('xyz/openbmc_project/MyService/MyError.errors.yaml')
 error_hpp = phosphor_logging_gen.process(
     error_yaml,
     preserve_path_from: meson.current_source_dir())
 ```
 
-### Use Error
+### Step 3: Use in Code
 
 ```cpp
 #include <xyz/openbmc_project/MyService/error.hpp>
@@ -587,6 +601,54 @@ report<MyConfigError>(
     xyz::openbmc_project::MyService::ConfigurationError::FILE("config.json"),
     xyz::openbmc_project::MyService::ConfigurationError::LINE(42)
 );
+```
+
+### Remote Syslog Deployment via Yocto
+
+To bake a default remote syslog destination into the image:
+
+```bash
+# meta-myplatform/recipes-phosphor/logging/
+# └── files/
+# │   └── remote.conf
+# └── phosphor-logging_%.bbappend
+
+cat > phosphor-logging_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://remote.conf"
+
+do_install:append() {
+    install -d ${D}${sysconfdir}/rsyslog.d
+    install -m 0644 ${WORKDIR}/remote.conf \
+        ${D}${sysconfdir}/rsyslog.d/
+}
+EOF
+```
+
+Example `remote.conf`:
+
+```
+# Forward all logs to central server
+*.* @@log-server.example.com:514
+```
+
+### Log Storage Configuration
+
+| Setting | Default | Where to Change |
+|---------|---------|-----------------|
+| Max error entries | 200 | `ERROR_CAP` in phosphor-logging meson options |
+| Max info entries | 10 | `ERROR_INFO_CAP` in meson options |
+| Persistence path | `/var/lib/phosphor-logging/errors/` | Compiled into binary |
+| Remote syslog | Disabled | `/etc/rsyslog.d/*.conf` or Redfish EventService |
+
+Customize log capacity via Yocto:
+
+```bash
+# meta-myplatform/recipes-phosphor/logging/phosphor-logging_%.bbappend
+EXTRA_OEMESON:append = " \
+    -Derror_cap=500 \
+    -Derror_info_cap=50 \
+"
 ```
 
 ---

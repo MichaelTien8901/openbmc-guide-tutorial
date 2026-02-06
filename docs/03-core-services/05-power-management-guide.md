@@ -156,15 +156,67 @@ systemctl start phosphor-regulators
 
 ### Configuration Files
 
+| Config File | Install Path | Format | Read By |
+|-------------|-------------|--------|---------|
+| PSU config | `/usr/share/entity-manager/configurations/psu.json` | Entity Manager JSON | Entity Manager → D-Bus → psu-monitor |
+| Regulators config | `/usr/share/phosphor-regulators/config.json` | phosphor-regulators JSON | phosphor-regulators directly |
+| Power sequencer | `/usr/share/phosphor-power-sequencer/config.json` | Sequencer JSON | phosphor-power-sequencer directly |
+
+### Deploying Configuration via Yocto
+
+Each config file needs a bbappend recipe to install it into the image.
+
+#### Regulators Config
+
 ```bash
-# PSU configuration (Entity Manager)
-/usr/share/entity-manager/configurations/psu.json
+# meta-myplatform/recipes-phosphor/power/phosphor-regulators/
+# └── files/
+# │   └── my-regulators-config.json
+# └── phosphor-regulators_%.bbappend
 
-# Regulators configuration
-/usr/share/phosphor-regulators/config.json
+cat > phosphor-regulators_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://my-regulators-config.json"
 
-# Power sequencer configuration
-/usr/share/phosphor-power-sequencer/config.json
+do_install:append() {
+    install -d ${D}${datadir}/phosphor-regulators
+    install -m 0644 ${WORKDIR}/my-regulators-config.json \
+        ${D}${datadir}/phosphor-regulators/config.json
+}
+EOF
+```
+
+#### PSU Entity Manager Config
+
+```bash
+# meta-myplatform/recipes-phosphor/configuration/entity-manager/
+# └── files/
+# │   └── my-psu-config.json
+# └── entity-manager_%.bbappend
+
+cat > entity-manager_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://my-psu-config.json"
+
+do_install:append() {
+    install -d ${D}${datadir}/entity-manager/configurations
+    install -m 0444 ${WORKDIR}/my-psu-config.json \
+        ${D}${datadir}/entity-manager/configurations/
+}
+EOF
+```
+
+#### Verification
+
+```bash
+# Verify regulators config loaded
+journalctl -u phosphor-regulators | head -20
+
+# Verify PSU detected via Entity Manager
+busctl tree xyz.openbmc_project.EntityManager | grep -i psu
+
+# Verify PSU sensors populated
+busctl tree xyz.openbmc_project.PSUSensor
 ```
 
 ### Power Restore Policy Configuration

@@ -117,6 +117,72 @@ EXTRA_OEMESON:pn-phosphor-network = " \
 | `sync-mac` | true | Sync MAC with hardware |
 | `persist-mac` | false | Persist MAC across reboots |
 
+### Configuration Files
+
+phosphor-networkd translates D-Bus settings to systemd-networkd `.network` files.
+Runtime configuration is persisted automatically. To bake default settings into
+the image, deploy `.network` files via Yocto.
+
+| Config File | Path | Description |
+|-------------|------|-------------|
+| Network config | `/etc/systemd/network/00-bmc-eth0.network` | Main BMC interface (DHCP or static) |
+| VLAN netdev | `/etc/systemd/network/00-bmc-eth0.100.netdev` | VLAN device definition |
+| VLAN config | `/etc/systemd/network/10-bmc-eth0.100.network` | VLAN interface config |
+| Resolved config | `/etc/systemd/resolved.conf` | DNS resolver settings |
+
+### Deploying Default Network Configuration via Yocto
+
+To bake a default static IP or DHCP configuration into the image:
+
+```bash
+# meta-myplatform/recipes-phosphor/network/phosphor-network/
+# └── files/
+# │   └── 00-bmc-eth0.network
+# └── phosphor-network_%.bbappend
+
+cat > phosphor-network_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://00-bmc-eth0.network"
+
+do_install:append() {
+    install -d ${D}${sysconfdir}/systemd/network
+    install -m 0644 ${WORKDIR}/00-bmc-eth0.network \
+        ${D}${sysconfdir}/systemd/network/
+}
+EOF
+```
+
+Example `00-bmc-eth0.network` for DHCP:
+
+```ini
+[Match]
+Name=eth0
+
+[Network]
+DHCP=ipv4
+LinkLocalAddressing=yes
+IPv6AcceptRA=true
+```
+
+Example for static IP:
+
+```ini
+[Match]
+Name=eth0
+
+[Network]
+Address=192.168.1.100/24
+Gateway=192.168.1.1
+DNS=8.8.8.8
+DNS=8.8.4.4
+LinkLocalAddressing=no
+```
+
+{: .note }
+Runtime changes via Redfish or D-Bus will overwrite these files. The Yocto-deployed
+file serves as the factory default. After a factory reset (`/usr/share/phosphor-bmc-code-mgmt/scripts/factory-reset.sh`),
+the image-baked config is restored.
+
 ### Runtime Configuration
 
 ```bash
@@ -129,6 +195,9 @@ ls /etc/systemd/network/
 
 # View current network state
 networkctl status
+
+# View active config for eth0
+cat /etc/systemd/network/00-bmc-eth0.network
 ```
 
 ---

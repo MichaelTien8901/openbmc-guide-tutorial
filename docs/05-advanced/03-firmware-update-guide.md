@@ -412,6 +412,68 @@ OBMC_PHOSPHOR_IMAGE_DUAL = "1"
 | `software-update-dbus-interface` | enabled | Expose D-Bus update interface |
 | `delete-images` | enabled | Allow image deletion |
 
+### Configuration Files and Paths
+
+| Config/Key File | Install Path | Description |
+|----------------|-------------|-------------|
+| Signing public key | `/etc/activationdata/OpenBMC/publickey` | Verify image signatures on the BMC |
+| Hash type | `/etc/activationdata/OpenBMC/hashfunc` | Hash algorithm (e.g., `RSA-SHA256`) |
+| MANIFEST | Inside firmware tarball | Image metadata (version, purpose, machine) |
+| Field mode flag | `/var/lib/phosphor-bmc-code-mgmt/field-mode` | When present, restricts update to signed images |
+
+### Deploying Signing Keys via Yocto
+
+To enable signature verification, deploy your public key into the image:
+
+```bash
+# meta-myplatform/recipes-phosphor/flash/phosphor-bmc-code-mgmt/
+# └── files/
+# │   ├── publickey        # RSA public key
+# │   └── hashfunc         # Contains "RSA-SHA256"
+# └── phosphor-bmc-code-mgmt_%.bbappend
+
+cat > phosphor-bmc-code-mgmt_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += " \
+    file://publickey \
+    file://hashfunc \
+"
+
+do_install:append() {
+    install -d ${D}${sysconfdir}/activationdata/OpenBMC
+    install -m 0444 ${WORKDIR}/publickey \
+        ${D}${sysconfdir}/activationdata/OpenBMC/
+    install -m 0444 ${WORKDIR}/hashfunc \
+        ${D}${sysconfdir}/activationdata/OpenBMC/
+}
+EOF
+```
+
+Generate the key pair:
+
+```bash
+# One-time setup (keep private.pem secure!)
+openssl genrsa -out private.pem 4096
+openssl rsa -in private.pem -pubout -out publickey
+echo "RSA-SHA256" > hashfunc
+```
+
+### Enabling Field Mode
+
+Field mode restricts the BMC to only accept signed firmware:
+
+```bash
+# Enable field mode (persists across reboots)
+busctl set-property xyz.openbmc_project.Software.BMC.Updater \
+    /xyz/openbmc_project/software \
+    xyz.openbmc_project.Control.FieldMode FieldModeEnabled b true
+
+# Verify field mode
+busctl get-property xyz.openbmc_project.Software.BMC.Updater \
+    /xyz/openbmc_project/software \
+    xyz.openbmc_project.Control.FieldMode FieldModeEnabled
+```
+
 ### Runtime Configuration
 
 ```bash

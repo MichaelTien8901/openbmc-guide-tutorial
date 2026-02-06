@@ -69,6 +69,56 @@ EXTRA_OEMESON:pn-phosphor-watchdog = " \
 "
 ```
 
+### Configuration Paths
+
+phosphor-watchdog is configured primarily through Meson build options and
+runtime D-Bus properties. There is no standalone JSON config file.
+
+| Configuration | Where | Description |
+|--------------|-------|-------------|
+| Default timeout | Meson `-Ddefault-timeout=300` | Initial countdown in seconds |
+| Default action | Meson `-Ddefault-action=HardReset` | Action on expiration |
+| Service template | `/lib/systemd/system/phosphor-watchdog@.service` | systemd unit template |
+| D-Bus policy | `/etc/dbus-1/system.d/phosphor-watchdog.conf` | D-Bus access control |
+| Runtime state | D-Bus properties (no file) | Managed via D-Bus at runtime |
+
+### Customizing Watchdog Defaults via Yocto
+
+To change the default timeout or action for your platform:
+
+```bash
+# meta-myplatform/recipes-phosphor/watchdog/
+# └── phosphor-watchdog_%.bbappend
+
+cat > phosphor-watchdog_%.bbappend << 'EOF'
+# Set platform-specific defaults
+EXTRA_OEMESON:append = " \
+    -Ddefault-action=PowerCycle \
+    -Ddefault-timeout=600 \
+"
+EOF
+```
+
+To add a custom systemd override for the watchdog service:
+
+```bash
+# meta-myplatform/recipes-phosphor/watchdog/
+# └── files/
+# │   └── override.conf
+# └── phosphor-watchdog_%.bbappend
+
+cat > phosphor-watchdog_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://override.conf"
+
+do_install:append() {
+    install -d ${D}${systemd_system_unitdir}/phosphor-watchdog@watchdog-host0.service.d
+    install -m 0644 ${WORKDIR}/override.conf \
+        ${D}${systemd_system_unitdir}/phosphor-watchdog@watchdog-host0.service.d/
+}
+EOF
+```
+
 ### Expiration Actions
 
 | Action | Description |

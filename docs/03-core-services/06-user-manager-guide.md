@@ -114,6 +114,85 @@ EXTRA_OEMESON:pn-phosphor-user-manager = " \
 "
 ```
 
+### Configuration Files
+
+| Config File | Install Path | Description |
+|-------------|-------------|-------------|
+| PAM auth config | `/etc/pam.d/common-auth` | Authentication module stack |
+| PAM password config | `/etc/pam.d/common-password` | Password change rules |
+| PAM account config | `/etc/pam.d/common-account` | Account validation |
+| LDAP client config | `/etc/nslcd.conf` | nslcd LDAP client settings |
+| LDAP NSS config | `/etc/nsswitch.conf` | Name service switch (adds ldap) |
+| D-Bus policy | `/etc/dbus-1/system.d/phosphor-user-manager.conf` | D-Bus access control |
+
+### Deploying Custom PAM Configuration via Yocto
+
+To customize PAM authentication (e.g., add stricter password policies or modify the auth
+module order), create a bbappend for the pam recipe:
+
+```bash
+# meta-myplatform/recipes-phosphor/users/phosphor-user-manager/
+# └── files/
+# │   └── common-auth
+# │   └── common-password
+# └── phosphor-user-manager_%.bbappend
+
+cat > phosphor-user-manager_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += " \
+    file://common-auth \
+    file://common-password \
+"
+
+do_install:append() {
+    # Deploy custom PAM configuration
+    install -d ${D}${sysconfdir}/pam.d
+    install -m 0644 ${WORKDIR}/common-auth ${D}${sysconfdir}/pam.d/
+    install -m 0644 ${WORKDIR}/common-password ${D}${sysconfdir}/pam.d/
+}
+EOF
+```
+
+Example `common-auth` with lockout policy:
+
+```
+# /etc/pam.d/common-auth
+auth required   pam_tally2.so deny=5 unlock_time=300 onerr=fail
+auth sufficient pam_unix.so nullok try_first_pass
+auth sufficient pam_ldap.so use_first_pass
+auth required   pam_deny.so
+```
+
+### LDAP Configuration Persistence
+
+LDAP configuration set via Redfish/D-Bus is persisted to:
+
+```bash
+# LDAP config persistence (managed by phosphor-user-manager)
+/var/lib/phosphor-user-manager/ldap.conf
+
+# nslcd runtime config (generated from D-Bus settings)
+/etc/nslcd.conf
+```
+
+To bake default LDAP settings into the image:
+
+```bash
+# meta-myplatform/recipes-phosphor/users/nss-pam-ldapd/
+# └── files/
+# │   └── nslcd.conf
+# └── nss-pam-ldapd_%.bbappend
+
+cat > nss-pam-ldapd_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://nslcd.conf"
+
+do_install:append() {
+    install -m 0600 ${WORKDIR}/nslcd.conf ${D}${sysconfdir}/
+}
+EOF
+```
+
 ### Runtime Configuration
 
 ```bash
@@ -126,6 +205,12 @@ journalctl -u phosphor-user-manager -f
 # User configuration files
 cat /etc/passwd
 cat /etc/group
+
+# Verify PAM config
+cat /etc/pam.d/common-auth
+
+# Verify LDAP client config
+cat /etc/nslcd.conf
 ```
 
 ---

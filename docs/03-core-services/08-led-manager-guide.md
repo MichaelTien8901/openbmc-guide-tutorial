@@ -120,32 +120,27 @@ IMAGE_INSTALL:append = " \
 LED_MANAGER_LED_CONFIG = "led.yaml"
 ```
 
-### LED Configuration File
+### Configuration Files and Paths
 
-Create LED group configuration:
+| Config File | Install Path | Format | Description |
+|-------------|-------------|--------|-------------|
+| LED groups (YAML) | `/usr/share/phosphor-led-manager/led.yaml` | YAML | Legacy: compiled into C++ at build time |
+| LED groups (JSON) | `/usr/share/phosphor-led-manager/led.json` | JSON | Preferred: runtime-parsed at service startup |
+| Entity Manager | `/usr/share/entity-manager/configurations/*.json` | EM JSON | Alternative: define LEDs via Entity Manager |
 
-```yaml
-# led.yaml (legacy format)
-bmc_booted:
-    enclosure_identify:
-        Action: 'Off'
-        DutyOn: 50
-        Period: 0
+### Two Configuration Methods
 
-enclosure_identify:
-    enclosure_identify:
-        Action: 'Blink'
-        DutyOn: 50
-        Period: 1000
+phosphor-led-manager supports two approaches:
 
-fault:
-    power:
-        Action: 'On'
-        DutyOn: 100
-        Period: 0
-```
+| | YAML Config (build-time) | JSON Config (runtime) |
+|---|---|---|
+| Config path | `/usr/share/phosphor-led-manager/led.yaml` | `/usr/share/phosphor-led-manager/led.json` |
+| When parsed | At meson build time (generates C++ constexpr) | At service startup (runtime parsing) |
+| Edit cycle | Rebuild image for changes | Replace file and restart service |
+| Meson option | Default | `-Duse-json=enabled` |
+| Recommended for | Production (smaller binary) | Development and rapid iteration |
 
-### JSON Configuration (preferred)
+### JSON Configuration (preferred for development)
 
 ```json
 {
@@ -176,17 +171,86 @@ fault:
 }
 ```
 
-### Runtime Configuration
+### YAML Configuration (legacy)
+
+```yaml
+# led.yaml - compiled into C++ at build time
+bmc_booted:
+    enclosure_identify:
+        Action: 'Off'
+        DutyOn: 50
+        Period: 0
+
+enclosure_identify:
+    enclosure_identify:
+        Action: 'Blink'
+        DutyOn: 50
+        Period: 1000
+
+fault:
+    power:
+        Action: 'On'
+        DutyOn: 100
+        Period: 0
+```
+
+### Deploying LED Configuration via Yocto
+
+#### Method 1: JSON Config (runtime)
+
+```bash
+# meta-myplatform/recipes-phosphor/leds/phosphor-led-manager/
+# └── files/
+# │   └── led.json
+# └── phosphor-led-manager_%.bbappend
+
+cat > phosphor-led-manager_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://led.json"
+
+# Enable JSON parsing (instead of compiled YAML)
+EXTRA_OEMESON:append = " -Duse-json=enabled"
+
+do_install:append() {
+    install -d ${D}${datadir}/phosphor-led-manager
+    install -m 0644 ${WORKDIR}/led.json \
+        ${D}${datadir}/phosphor-led-manager/
+}
+EOF
+```
+
+#### Method 2: YAML Config (build-time)
+
+```bash
+# meta-myplatform/recipes-phosphor/leds/phosphor-led-manager/
+# └── files/
+# │   └── led.yaml
+# └── phosphor-led-manager_%.bbappend
+
+cat > phosphor-led-manager_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://led.yaml"
+
+# Tell the build system where to find your YAML
+LED_MANAGER_LED_CONFIG = "${WORKDIR}/led.yaml"
+EOF
+```
+
+### Verification
 
 ```bash
 # Check LED manager service
 systemctl status phosphor-led-manager
 
-# View available LEDs
+# View available physical LEDs
 ls /sys/class/leds/
 
-# Check LED D-Bus objects
+# Check LED D-Bus groups
 busctl tree xyz.openbmc_project.LED.GroupManager
+
+# Verify a specific group is defined
+busctl introspect xyz.openbmc_project.LED.GroupManager \
+    /xyz/openbmc_project/led/groups/enclosure_identify
 ```
 
 ---
@@ -357,20 +421,54 @@ echo 500 > /sys/class/leds/identify/delay_off
 
 ## Entity Manager Integration
 
-Configure LEDs via Entity Manager JSON:
+Entity Manager can define physical LED-to-GPIO mappings, which phosphor-led-sysfs
+uses to create the sysfs LED entries. This is an alternative to device tree
+`gpio-leds` definitions.
+
+**Install path**: `/usr/share/entity-manager/configurations/<board-name>.json`
 
 ```json
 {
+    "Name": "MyBoard LEDs",
+    "Type": "Board",
+    "Probe": "TRUE",
+
     "Exposes": [
         {
             "Name": "Identify LED",
             "Type": "led",
             "Polarity": "Active High",
             "GpioPin": "IDENTIFY_LED"
+        },
+        {
+            "Name": "Fault LED",
+            "Type": "led",
+            "Polarity": "Active Low",
+            "GpioPin": "FAULT_LED"
         }
     ]
 }
 ```
+
+Deploy via Yocto:
+
+```bash
+cat > entity-manager_%.bbappend << 'EOF'
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://my-board-leds.json"
+
+do_install:append() {
+    install -d ${D}${datadir}/entity-manager/configurations
+    install -m 0444 ${WORKDIR}/my-board-leds.json \
+        ${D}${datadir}/entity-manager/configurations/
+}
+EOF
+```
+
+{: .note }
+Entity Manager LED definitions define the **physical LED hardware**. You still
+need a `led.json` or `led.yaml` to define the **logical LED groups** (which
+groups map to which physical LEDs with what actions).
 
 ---
 
