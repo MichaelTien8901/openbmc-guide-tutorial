@@ -21,10 +21,10 @@ This appendix provides a technical comparison of the two platforms across build 
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                   AMI MegaRAC OneTree                         │
+│                   AMI MegaRAC OneTree                        │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │          Proprietary Value-Add Modules                 │  │
-│  │   GPU Mgmt · CXL Fabric · Liquid Cooling · Security   │  │
+│  │   GPU Mgmt · CXL Fabric · Liquid Cooling · Security    │  │
 │  ├────────────────────────────────────────────────────────┤  │
 │  │         OneTree Development Studio (ODS)               │  │
 │  │        IDE · CLI · Project Wizard · SDK                │  │
@@ -32,8 +32,8 @@ This appendix provides a technical comparison of the two platforms across build 
 │  │              AMI Unified Codebase                      │  │
 │  │   Multi-SoC · Multi-Platform · Curated Layers          │  │
 │  ├────────────────────────────────────────────────────────┤  │
-│  │            OpenBMC Open-Source Base                     │  │
-│  │  Yocto · phosphor-* · bmcweb · sdbusplus · systemd    │  │
+│  │            OpenBMC Open-Source Base                    │  │
+│  │  Yocto · phosphor-* · bmcweb · sdbusplus · systemd     │  │
 │  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
 ```

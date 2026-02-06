@@ -24,10 +24,10 @@ This appendix documents the CI architecture, job structure, Docker test infrastr
 OpenBMC implements a two-tier testing strategy:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                  Tier 1: Repository-Level CI                 │
-│                  (fast, per-commit, minutes)                 │
-│                                                              │
+┌─────────────────────────────────────────────────────────────┐
+│                  Tier 1: Repository-Level CI                │
+│                  (fast, per-commit, minutes)                │
+│                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐  │
 │  │ Code Format  │  │  Build Repo  │  │   Unit Tests      │  │
 │  │ (14 linters) │  │ (meson/cmake)│  │ (meson test/ctest)│  │
@@ -35,15 +35,15 @@ OpenBMC implements a two-tier testing strategy:
 │  ┌──────────────┐  ┌──────────────┐                         │
 │  │   cppcheck   │  │  valgrind    │  (optional analysis)    │
 │  └──────────────┘  └──────────────┘                         │
-├──────────────────────────────────────────────────────────────┤
-│                  Tier 2: System-Level CI                     │
-│                  (slow, integration, hours)                  │
-│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│                  Tier 2: System-Level CI                    │
+│                  (slow, integration, hours)                 │
+│                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐  │
 │  │ BitBake Full │  │  QEMU Boot   │  │ Robot Framework   │  │
 │  │ Image Build  │  │  (ARM emu)   │  │ Integration Tests │  │
 │  └──────────────┘  └──────────────┘  └───────────────────┘  │
-└──────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### Tier 1: Repository-Level CI
@@ -135,8 +135,8 @@ Developer                    Gerrit                     Jenkins
    │                           │    (check CI auth)       │
    │                           │                          │
    │                           │    IF authorized:        │
-   │                           │<── ok-to-test=1 ────────│
-   │                           │<── ok-to-test=0 ────────│
+   │                           │<── ok-to-test=1 ─────────│
+   │                           │<── ok-to-test=0 ─────────│
    │                           │    (reset to prevent     │
    │                           │     infinite triggers)   │
    │                           │                          │
@@ -144,7 +144,7 @@ Developer                    Gerrit                     Jenkins
    │                           │    ci-repository         │
    │                           │    ci-openbmc            │
    │                           │                          │
-   │                           │<── Verified +1/-1 ──────│
+   │                           │<── Verified +1/-1 ───────│
    │<── Review notification ───│                          │
 ```
 
