@@ -20,6 +20,7 @@ Dive into advanced protocols, security features, logging, and debug capabilities
 - eSPI communication (virtual wires, console, eDAF)
 - Unit testing with GTest/GMock
 - Integration testing with Robot Framework
+- Linux kernel patching for driver development
 
 ## Topics
 
@@ -73,6 +74,14 @@ Validate code correctness with unit tests and system behavior with integration t
 |-------|-------------|-------|
 | [Unit Testing]({% link docs/05-advanced/10-unit-testing-guide.md %}) | GTest/GMock for C++ unit tests | Single function/class |
 | [Robot Framework]({% link docs/05-advanced/11-robot-framework-guide.md %}) | Integration testing with openbmc-test-automation | Full system behavior |
+
+### Kernel & Driver Development
+
+Modify the Linux kernel image for driver development and hardware enablement.
+
+| Guide | Description | Difficulty |
+|-------|-------------|------------|
+| [Linux Kernel Patching]({% link docs/05-advanced/12-linux-kernel-patching-guide.md %}) | System patch files for driver development, device trees, kernel config | Advanced |
 
 ## Protocol Stack
 
