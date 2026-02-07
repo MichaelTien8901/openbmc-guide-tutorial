@@ -955,10 +955,10 @@ The ACPI Error INJection (EINJ) table provides a firmware-standard method to inj
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    EINJ Error Injection Flow                  │
+│                    EINJ Error Injection Flow                 │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
-│  BMC / Test Host                        Platform BIOS/UEFI  │
+│  BMC / Test Host                        Platform BIOS/UEFI   │
 │  ┌──────────────────────┐               ┌──────────────────┐ │
 │  │ Redfish / ipmitool   │               │ ACPI EINJ Table  │ │
 │  │ or Linux einj driver │──── IPMI ────>│ Error Action     │ │
@@ -968,7 +968,7 @@ The ACPI Error INJection (EINJ) table provides a firmware-standard method to inj
 │                                         ┌────────v─────────┐ │
 │  Host OS (Linux)                        │ Platform HW      │ │
 │  ┌──────────────────────┐               │ Error injection  │ │
-│  │ /sys/kernel/debug/   │ ─── MMIO ───>│ registers        │ │
+│  │ /sys/kernel/debug/   │ ─── MMIO ───>│ registers         │ │
 │  │   apei/einj/         │               └──────────────────┘ │
 │  └──────────────────────┘                                    │
 │                                                              │
