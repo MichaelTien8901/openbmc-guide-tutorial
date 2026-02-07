@@ -737,7 +737,7 @@ devtool status
 
 - [Development Workflow]({% link docs/01-getting-started/04-development-workflow.md %}) - Learn bbappend customization and build optimization
 - [D-Bus Guide]({% link docs/02-architecture/02-dbus-guide.md %}) - Understand D-Bus interfaces used by OpenBMC services
-- [State Manager Guide]({% link docs/03-core-services/03-state-manager-guide.md %}) - Deep dive into power state management
+- [State Manager Guide]({% link docs/02-architecture/03-state-manager-guide.md %}) - Deep dive into power state management
 - [Unit Testing Guide]({% link docs/05-advanced/10-unit-testing-guide.md %}) - Write tests for your code changes
 
 ---
