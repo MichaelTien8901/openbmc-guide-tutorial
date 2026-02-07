@@ -1,0 +1,58 @@
+# systemd service unit for the example-greeting D-Bus service
+#
+# This unit file follows the standard OpenBMC pattern for D-Bus services:
+#   - Type=dbus with BusName= so systemd knows the service is ready when
+#     it acquires the well-known D-Bus name
+#   - After=dbus.service to ensure D-Bus daemon is running
+#   - WantedBy=obmc-standby.target so the service starts during normal
+#     BMC operation (after basic init but before host power-on)
+#
+# Installation:
+#   Installed automatically by meson.build or the BitBake recipe to
+#   /lib/systemd/system/example-greeting.service
+#
+# Manual testing:
+#   systemctl start example-greeting
+#   systemctl status example-greeting
+#   journalctl -u example-greeting -f
+
+[Unit]
+Description=Example Greeting D-Bus Service
+Documentation=https://github.com/openbmc/sdbusplus
+
+# Wait for D-Bus to be available before starting
+After=dbus.service
+Requires=dbus.service
+
+# Optional: wait for mapper so our objects can be discovered
+After=mapper-wait@-xyz-openbmc_project-example-greeting.service
+
+[Service]
+# D-Bus activation type: systemd considers the service started once it
+# acquires the specified bus name. This is the preferred type for D-Bus
+# services as it provides reliable readiness notification.
+Type=dbus
+BusName=xyz.openbmc_project.Example.Greeting
+
+ExecStart=/usr/bin/example-greeting
+
+# Restart on failure for reliability
+Restart=on-failure
+RestartSec=5
+
+# Resource limits appropriate for a small D-Bus service
+MemoryMax=16M
+CPUQuota=10%
+
+# Security hardening (standard for OpenBMC services)
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+
+# Logging identifier for journalctl
+SyslogIdentifier=example-greeting
+
+[Install]
+# obmc-standby.target is the standard OpenBMC target for services that
+# should run whenever the BMC is operational (not just during host power-on).
+WantedBy=obmc-standby.target

@@ -1,0 +1,596 @@
+{
+    "Name": "Multi-Host Sled Platform",
+    "Type": "Board",
+    "Probe": "xyz.openbmc_project.FruDevice({'PRODUCT_PRODUCT_NAME': '4-Host Sled'})",
+
+    "xyz.openbmc_project.Inventory.Item": {
+        "Present": true,
+        "PrettyName": "4-Host Sled Baseboard"
+    },
+
+    "xyz.openbmc_project.Inventory.Decorator.Asset": {
+        "Manufacturer": "$PRODUCT_MANUFACTURER",
+        "Model": "$PRODUCT_PRODUCT_NAME",
+        "PartNumber": "$PRODUCT_PART_NUMBER",
+        "SerialNumber": "$PRODUCT_SERIAL_NUMBER"
+    },
+
+    "Exposes": [
+        {
+            "__comment": "=== Host 0 - I2C Bus 2 ===",
+            "Name": "Host0 IPMB",
+            "Type": "IpmbSensor",
+            "Bus": 2,
+            "Address": "0x20",
+            "HostId": 0,
+            "Class": "MBTemp",
+            "ReadCommand": "0x2E 0x04 0x01 0x00 0x00 0x01",
+            "SensorName": "Host0 CPU Temp",
+            "SensorUnits": "xyz.openbmc_project.Sensor.Value.Unit.DegreesC",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 100
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 90
+                }
+            ]
+        },
+        {
+            "Name": "Host0 DIMM Temp IPMB",
+            "Type": "IpmbSensor",
+            "Bus": 2,
+            "Address": "0x20",
+            "HostId": 0,
+            "Class": "MBTemp",
+            "ReadCommand": "0x2E 0x04 0x01 0x00 0x00 0x05",
+            "SensorName": "Host0 DIMM Temp",
+            "SensorUnits": "xyz.openbmc_project.Sensor.Value.Unit.DegreesC",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 85
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 80
+                }
+            ]
+        },
+        {
+            "Name": "Host0 Inlet Temp",
+            "Type": "TMP75",
+            "Bus": 2,
+            "Address": "0x48",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 45
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 40
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 5
+                }
+            ]
+        },
+        {
+            "Name": "Host0 Outlet Temp",
+            "Type": "TMP75",
+            "Bus": 2,
+            "Address": "0x49",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 55
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 50
+                }
+            ]
+        },
+        {
+            "Name": "Host0 P12V",
+            "Type": "ADC",
+            "Index": 0,
+            "ScaleFactor": 4.0,
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 13.2
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 10.8
+                }
+            ]
+        },
+        {
+            "Name": "Host0 FRU",
+            "Type": "EEPROM",
+            "Bus": 2,
+            "Address": "0x50",
+            "Size": 256
+        },
+
+        {
+            "__comment": "=== Host 1 - I2C Bus 3 ===",
+            "Name": "Host1 IPMB",
+            "Type": "IpmbSensor",
+            "Bus": 3,
+            "Address": "0x20",
+            "HostId": 1,
+            "Class": "MBTemp",
+            "ReadCommand": "0x2E 0x04 0x01 0x00 0x00 0x01",
+            "SensorName": "Host1 CPU Temp",
+            "SensorUnits": "xyz.openbmc_project.Sensor.Value.Unit.DegreesC",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 100
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 90
+                }
+            ]
+        },
+        {
+            "Name": "Host1 DIMM Temp IPMB",
+            "Type": "IpmbSensor",
+            "Bus": 3,
+            "Address": "0x20",
+            "HostId": 1,
+            "Class": "MBTemp",
+            "ReadCommand": "0x2E 0x04 0x01 0x00 0x00 0x05",
+            "SensorName": "Host1 DIMM Temp",
+            "SensorUnits": "xyz.openbmc_project.Sensor.Value.Unit.DegreesC",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 85
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 80
+                }
+            ]
+        },
+        {
+            "Name": "Host1 Inlet Temp",
+            "Type": "TMP75",
+            "Bus": 3,
+            "Address": "0x48",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 45
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 40
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 5
+                }
+            ]
+        },
+        {
+            "Name": "Host1 Outlet Temp",
+            "Type": "TMP75",
+            "Bus": 3,
+            "Address": "0x49",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 55
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 50
+                }
+            ]
+        },
+        {
+            "Name": "Host1 P12V",
+            "Type": "ADC",
+            "Index": 1,
+            "ScaleFactor": 4.0,
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 13.2
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 10.8
+                }
+            ]
+        },
+        {
+            "Name": "Host1 FRU",
+            "Type": "EEPROM",
+            "Bus": 3,
+            "Address": "0x50",
+            "Size": 256
+        },
+
+        {
+            "__comment": "=== Host 2 - I2C Bus 4 ===",
+            "Name": "Host2 IPMB",
+            "Type": "IpmbSensor",
+            "Bus": 4,
+            "Address": "0x20",
+            "HostId": 2,
+            "Class": "MBTemp",
+            "ReadCommand": "0x2E 0x04 0x01 0x00 0x00 0x01",
+            "SensorName": "Host2 CPU Temp",
+            "SensorUnits": "xyz.openbmc_project.Sensor.Value.Unit.DegreesC",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 100
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 90
+                }
+            ]
+        },
+        {
+            "Name": "Host2 DIMM Temp IPMB",
+            "Type": "IpmbSensor",
+            "Bus": 4,
+            "Address": "0x20",
+            "HostId": 2,
+            "Class": "MBTemp",
+            "ReadCommand": "0x2E 0x04 0x01 0x00 0x00 0x05",
+            "SensorName": "Host2 DIMM Temp",
+            "SensorUnits": "xyz.openbmc_project.Sensor.Value.Unit.DegreesC",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 85
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 80
+                }
+            ]
+        },
+        {
+            "Name": "Host2 Inlet Temp",
+            "Type": "TMP75",
+            "Bus": 4,
+            "Address": "0x48",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 45
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 40
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 5
+                }
+            ]
+        },
+        {
+            "Name": "Host2 Outlet Temp",
+            "Type": "TMP75",
+            "Bus": 4,
+            "Address": "0x49",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 55
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 50
+                }
+            ]
+        },
+        {
+            "Name": "Host2 P12V",
+            "Type": "ADC",
+            "Index": 2,
+            "ScaleFactor": 4.0,
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 13.2
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 10.8
+                }
+            ]
+        },
+        {
+            "Name": "Host2 FRU",
+            "Type": "EEPROM",
+            "Bus": 4,
+            "Address": "0x50",
+            "Size": 256
+        },
+
+        {
+            "__comment": "=== Host 3 - I2C Bus 5 ===",
+            "Name": "Host3 IPMB",
+            "Type": "IpmbSensor",
+            "Bus": 5,
+            "Address": "0x20",
+            "HostId": 3,
+            "Class": "MBTemp",
+            "ReadCommand": "0x2E 0x04 0x01 0x00 0x00 0x01",
+            "SensorName": "Host3 CPU Temp",
+            "SensorUnits": "xyz.openbmc_project.Sensor.Value.Unit.DegreesC",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 100
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 90
+                }
+            ]
+        },
+        {
+            "Name": "Host3 DIMM Temp IPMB",
+            "Type": "IpmbSensor",
+            "Bus": 5,
+            "Address": "0x20",
+            "HostId": 3,
+            "Class": "MBTemp",
+            "ReadCommand": "0x2E 0x04 0x01 0x00 0x00 0x05",
+            "SensorName": "Host3 DIMM Temp",
+            "SensorUnits": "xyz.openbmc_project.Sensor.Value.Unit.DegreesC",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 85
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 80
+                }
+            ]
+        },
+        {
+            "Name": "Host3 Inlet Temp",
+            "Type": "TMP75",
+            "Bus": 5,
+            "Address": "0x48",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 45
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 40
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 5
+                }
+            ]
+        },
+        {
+            "Name": "Host3 Outlet Temp",
+            "Type": "TMP75",
+            "Bus": 5,
+            "Address": "0x49",
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 55
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 50
+                }
+            ]
+        },
+        {
+            "Name": "Host3 P12V",
+            "Type": "ADC",
+            "Index": 3,
+            "ScaleFactor": 4.0,
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 13.2
+                },
+                {
+                    "Direction": "less than",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 10.8
+                }
+            ]
+        },
+        {
+            "Name": "Host3 FRU",
+            "Type": "EEPROM",
+            "Bus": 5,
+            "Address": "0x50",
+            "Size": 256
+        },
+
+        {
+            "__comment": "=== Shared BMC Sensors ===",
+            "Name": "BMC Ambient Temp",
+            "Type": "TMP75",
+            "Bus": 1,
+            "Address": "0x48",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 50
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 45
+                }
+            ]
+        },
+        {
+            "Name": "Fan0",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "Fan0",
+                "Pwm": 0,
+                "Tachs": [0]
+            }
+        },
+        {
+            "Name": "Fan1",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "Fan1",
+                "Pwm": 1,
+                "Tachs": [1]
+            }
+        },
+        {
+            "Name": "Fan2",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "Fan2",
+                "Pwm": 2,
+                "Tachs": [2]
+            }
+        },
+        {
+            "Name": "Fan3",
+            "Type": "AspeedFan",
+            "Connector": {
+                "Name": "Fan3",
+                "Pwm": 3,
+                "Tachs": [3]
+            }
+        },
+        {
+            "Name": "System FRU",
+            "Type": "EEPROM",
+            "Bus": 1,
+            "Address": "0x50",
+            "Size": 256
+        }
+    ]
+}

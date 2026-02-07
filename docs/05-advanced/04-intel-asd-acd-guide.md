@@ -912,6 +912,223 @@ OpenIPC (Open In-band Processor Communication) is part of Intel System Studio an
 
 ---
 
+## Error Injection
+
+Error injection enables RAS (Reliability, Availability, Serviceability) validation by deliberately triggering hardware errors to verify detection and recovery mechanisms.
+
+### Error Injection via ASD/ITP
+
+When connected to a CPU via ASD, you can inject errors through the debug interface to test MCA handling:
+
+```bash
+# Prerequisites:
+# - ASD daemon running and connected
+# - Intel System Debugger (ISD) or OpenIPC connected
+# - Host powered on and running OS
+
+# Via ISD scripting interface (Python):
+# Connect to target
+target = debugger.connect("asd://bmc-ip:5123")
+
+# Inject correctable memory error (CE)
+# Write to IA32_MCi_STATUS to simulate error
+target.write_msr(thread=0, msr=0x401,
+    value=0x8C00004000010150)  # Correctable ECC error
+
+# Inject uncorrectable error (UCE)
+target.write_msr(thread=0, msr=0x401,
+    value=0xBE00000000800400)  # Uncorrected, PCC set
+
+# Trigger machine check via APIC
+target.write_msr(thread=0, msr=0x79,  # MCG_STATUS
+    value=0x05)  # MCIP + RIPV
+```
+
+{: .warning }
+Error injection through ASD bypasses normal error reporting paths. Use only in isolated test environments with expendable hardware. Injecting UCE with PCC (Processor Context Corrupt) will crash the host.
+
+### ACPI EINJ Interface
+
+The ACPI Error INJection (EINJ) table provides a firmware-standard method to inject errors without requiring ASD debug access. This is the preferred method for production-like RAS testing.
+
+#### EINJ Overview
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    EINJ Error Injection Flow                  │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  BMC / Test Host                        Platform BIOS/UEFI  │
+│  ┌──────────────────────┐               ┌──────────────────┐ │
+│  │ Redfish / ipmitool   │               │ ACPI EINJ Table  │ │
+│  │ or Linux einj driver │──── IPMI ────>│ Error Action     │ │
+│  └──────────────────────┘               │ Table entries    │ │
+│                                         └────────┬─────────┘ │
+│                                                  │           │
+│                                         ┌────────v─────────┐ │
+│  Host OS (Linux)                        │ Platform HW      │ │
+│  ┌──────────────────────┐               │ Error injection  │ │
+│  │ /sys/kernel/debug/   │ ─── MMIO ───>│ registers        │ │
+│  │   apei/einj/         │               └──────────────────┘ │
+│  └──────────────────────┘                                    │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+#### Using EINJ from the Host OS
+
+```bash
+# On the host Linux OS (not the BMC):
+
+# Load EINJ support module
+modprobe einj
+
+# Check available error types
+cat /sys/kernel/debug/apei/einj/available_error_type
+# Typical output:
+# 0x00000001  Processor Correctable
+# 0x00000002  Processor Uncorrectable non-fatal
+# 0x00000004  Processor Uncorrectable fatal
+# 0x00000008  Memory Correctable
+# 0x00000010  Memory Uncorrectable non-fatal
+# 0x00000020  Memory Uncorrectable fatal
+# 0x00000040  PCIe Correctable
+# 0x00000080  PCIe Uncorrectable non-fatal
+# 0x00000100  PCIe Uncorrectable fatal
+
+# Inject correctable memory error
+echo 0x00000008 > /sys/kernel/debug/apei/einj/error_type
+echo 0x0 > /sys/kernel/debug/apei/einj/error_inject
+
+# Inject PCIe correctable error
+echo 0x00000040 > /sys/kernel/debug/apei/einj/error_type
+echo 0x0 > /sys/kernel/debug/apei/einj/error_inject
+
+# Inject memory UCE at specific address
+echo 0x00000010 > /sys/kernel/debug/apei/einj/error_type
+echo 0x7F400000 > /sys/kernel/debug/apei/einj/param1  # Physical address
+echo 0xFFFFFFFFFFFFF000 > /sys/kernel/debug/apei/einj/param2  # Address mask
+echo 0x0 > /sys/kernel/debug/apei/einj/error_inject
+```
+
+#### Monitoring Injected Errors from BMC
+
+After injecting errors on the host, verify the BMC captures them:
+
+```bash
+# On the BMC:
+
+# Check for new crash dumps (for fatal errors)
+curl -k -u root:0penBmc \
+    https://localhost/redfish/v1/Systems/system/LogServices/Crashdump/Entries
+
+# Check System Event Log for error records
+curl -k -u root:0penBmc \
+    https://localhost/redfish/v1/Systems/system/LogServices/EventLog/Entries
+
+# Monitor PECI for MCA errors in real-time
+journalctl -u crashdump -f
+
+# Check if CATERR was asserted (for fatal errors)
+gpioget gpiochip0 <caterr_pin>
+```
+
+### RAS Validation Workflow
+
+A structured approach to validating RAS features on an Intel platform with OpenBMC:
+
+#### Step 1: Pre-Test Setup
+
+```bash
+# Verify BMC services are running
+systemctl status crashdump
+systemctl status phosphor-host-state-manager
+
+# Clear existing logs
+curl -k -u root:0penBmc -X POST \
+    https://localhost/redfish/v1/Systems/system/LogServices/Crashdump/Actions/LogService.ClearLog
+
+# Verify PECI connectivity to all CPUs
+peci_cmds Ping 0x30  # CPU0
+peci_cmds Ping 0x31  # CPU1 (if dual-socket)
+
+# Record baseline MCA state
+for bank in 0 1 2 3 4 5; do
+    msr=$((0x401 + bank * 4))
+    peci_cmds RdIAMSR 0x30 0 $(printf "0x%x" $msr)
+done
+```
+
+#### Step 2: Execute Test Matrix
+
+| Test Case | Error Type | Injection Method | Expected BMC Response |
+|-----------|-----------|-----------------|----------------------|
+| CE-MEM-01 | Memory correctable | EINJ 0x08 | SEL entry, no crash dump |
+| CE-PCIE-01 | PCIe correctable | EINJ 0x40 | SEL entry, AER log |
+| UCE-MEM-01 | Memory uncorrectable | EINJ 0x10 | SEL + crash dump collected |
+| UCE-FATAL-01 | Fatal processor | EINJ 0x04 | CATERR, full crash dump, host reset |
+| MCA-ITP-01 | MCA via ASD | ISD MSR write | Crash dump if PCC set |
+
+#### Step 3: Verify Collection
+
+```bash
+# After each injection, verify BMC response:
+
+# 1. Check crash dump was collected (for UCE/fatal)
+ENTRIES=$(curl -sk -u root:0penBmc \
+    https://localhost/redfish/v1/Systems/system/LogServices/Crashdump/Entries \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['Members@odata.count'])")
+echo "Crash dump entries: $ENTRIES"
+
+# 2. Download and validate crash dump content
+curl -sk -u root:0penBmc -o crashdump.json \
+    "https://localhost/redfish/v1/Systems/system/LogServices/Crashdump/Entries/1/attachment"
+
+# 3. Verify MCA banks contain expected error signature
+python3 -c "
+import json
+with open('crashdump.json') as f:
+    data = json.load(f)
+for cpu in ['CPU0', 'CPU1']:
+    if cpu in data.get('crash_data', {}):
+        mca = data['crash_data'][cpu].get('MCA', {})
+        for bank, val in mca.items():
+            if bank.endswith('_STATUS') and int(val, 16) & (1 << 63):
+                uc = 'UC' if int(val, 16) & (1 << 61) else 'CE'
+                print(f'{cpu} {bank}: {val} [{uc}]')
+"
+
+# 4. Verify host recovery (for non-fatal errors)
+obmcutil state  # Should show Running for non-fatal
+```
+
+#### Step 4: Report Generation
+
+```bash
+# Collect all test artifacts
+mkdir -p /tmp/ras-validation-$(date +%Y%m%d)
+cd /tmp/ras-validation-$(date +%Y%m%d)
+
+# Export crash dumps
+for i in $(seq 1 $ENTRIES); do
+    curl -sk -u root:0penBmc -o "crashdump_${i}.json" \
+        "https://localhost/redfish/v1/Systems/system/LogServices/Crashdump/Entries/${i}/attachment"
+done
+
+# Export event log
+curl -sk -u root:0penBmc -o event_log.json \
+    https://localhost/redfish/v1/Systems/system/LogServices/EventLog/Entries
+
+# Export BMC journal
+journalctl -u crashdump --since "today" > crashdump_journal.log
+journalctl -u phosphor-host-state-manager --since "today" > state_manager.log
+```
+
+{: .tip }
+For automated RAS validation, see the example scripts in `docs/examples/error-injection/` which automate the inject-verify-report cycle.
+
+---
+
 ## Deep Dive
 
 This section provides detailed technical information for developers who want to understand Intel ASD and crash dump internals.

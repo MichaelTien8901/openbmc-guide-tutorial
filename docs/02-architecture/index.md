@@ -44,6 +44,8 @@ The "phosphor-*" repositories contain the core OpenBMC services:
 | [OpenBMC Overview]({% link docs/02-architecture/01-openbmc-overview.md %}) | Architecture, build system, community | Beginner |
 | [D-Bus Fundamentals]({% link docs/02-architecture/02-dbus-guide.md %}) | D-Bus concepts and usage | Beginner |
 | [State Management]({% link docs/02-architecture/03-state-manager-guide.md %}) | BMC/Chassis/Host states | Intermediate |
+| [Custom D-Bus Services]({% link docs/02-architecture/04-custom-dbus-services-guide.md %}) | Build your own D-Bus service with sdbus++ | Intermediate |
+| [Systemd Boot Ordering]({% link docs/02-architecture/05-systemd-boot-ordering-guide.md %}) | Service dependencies and boot sequence | Intermediate |
 
 ## Prerequisite Knowledge
 

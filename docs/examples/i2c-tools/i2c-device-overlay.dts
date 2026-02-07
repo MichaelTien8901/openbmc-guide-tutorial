@@ -1,0 +1,130 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+//
+// I2C Device Tree Overlay - TMP75 Temperature Sensor
+//
+// Sample overlay that adds a TI TMP75 temperature sensor at address 0x48
+// on I2C bus 0. Use this as a template for adding I2C sensor nodes to
+// your OpenBMC platform.
+//
+// Compile:
+//   dtc -O dtb -o i2c-device-overlay.dtbo i2c-device-overlay.dts
+//
+// Apply at runtime (requires configfs overlay support):
+//   mkdir -p /sys/kernel/config/device-tree/overlays/i2c-sensor
+//   cat i2c-device-overlay.dtbo > \
+//       /sys/kernel/config/device-tree/overlays/i2c-sensor/dtbo
+//
+// Apply at build time (Yocto):
+//   Add to your machine .bbappend:
+//     SRC_URI += "file://i2c-device-overlay.dts"
+//     KERNEL_DEVICETREE:append = " i2c-device-overlay.dtbo"
+
+/dts-v1/;
+/plugin/;
+
+// =============================================================================
+// I2C Bus 0 - Add Temperature Sensor
+// =============================================================================
+//
+// This overlay targets I2C bus 0. Change the target path to match your
+// platform's device tree. Common paths on AST2600:
+//
+//   &i2c0  or  /ahb/apb/bus@1e78a000/i2c-bus@80   (bus 0)
+//   &i2c1  or  /ahb/apb/bus@1e78a000/i2c-bus@c0   (bus 1)
+//   &i2c2  or  /ahb/apb/bus@1e78a000/i2c-bus@100  (bus 2)
+
+&i2c0 {
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    // =========================================================================
+    // TMP75 Temperature Sensor at 0x48
+    // =========================================================================
+    //
+    // The TMP75 is a common I2C temperature sensor used in BMC platforms.
+    // Address pins A0-A2 set the I2C address in the range 0x48-0x4F.
+    //
+    //   A2 A1 A0 | Address
+    //   ---------+---------
+    //    0  0  0 | 0x48
+    //    0  0  1 | 0x49
+    //    0  1  0 | 0x4A
+    //    0  1  1 | 0x4B
+    //    1  0  0 | 0x4C
+    //    1  0  1 | 0x4D
+    //    1  1  0 | 0x4E
+    //    1  1  1 | 0x4F
+    //
+    // The kernel lm75 driver creates hwmon entries:
+    //   /sys/class/hwmon/hwmonN/temp1_input   (millidegrees C)
+    //   /sys/class/hwmon/hwmonN/temp1_max
+    //   /sys/class/hwmon/hwmonN/temp1_max_hyst
+
+    tmp75_inlet: tmp75@48 {
+        compatible = "ti,tmp75";
+        reg = <0x48>;
+        label = "Inlet Temperature";
+        status = "okay";
+    };
+
+    // =========================================================================
+    // Additional sensor examples (uncomment as needed)
+    // =========================================================================
+
+    // --- TMP75 at 0x49 (outlet temperature) ---
+    //
+    // tmp75_outlet: tmp75@49 {
+    //     compatible = "ti,tmp75";
+    //     reg = <0x49>;
+    //     label = "Outlet Temperature";
+    //     status = "okay";
+    // };
+
+    // --- TMP421 remote/local sensor at 0x4C ---
+    //
+    // tmp421: tmp421@4c {
+    //     compatible = "ti,tmp421";
+    //     reg = <0x4c>;
+    //     label = "CPU Temperature";
+    //     status = "okay";
+    // };
+
+    // --- EMC1413 triple temperature sensor at 0x4C ---
+    //
+    // emc1413: emc1413@4c {
+    //     compatible = "smsc,emc1413";
+    //     reg = <0x4c>;
+    //     label = "VRM Temperature";
+    //     status = "okay";
+    // };
+
+    // --- FRU EEPROM at 0x50 ---
+    //
+    // eeprom_fru: eeprom@50 {
+    //     compatible = "atmel,24c256";
+    //     reg = <0x50>;
+    //     label = "System FRU";
+    //     pagesize = <64>;
+    //     status = "okay";
+    // };
+
+    // --- INA219 power monitor at 0x40 ---
+    //
+    // ina219: ina219@40 {
+    //     compatible = "ti,ina219";
+    //     reg = <0x40>;
+    //     label = "12V Rail";
+    //     shunt-resistor = <10000>;  // 10 mOhm in micro-ohms
+    //     status = "okay";
+    // };
+
+    // --- PCA9555 GPIO expander at 0x20 ---
+    //
+    // pca9555: pca9555@20 {
+    //     compatible = "nxp,pca9555";
+    //     reg = <0x20>;
+    //     gpio-controller;
+    //     #gpio-cells = <2>;
+    //     status = "okay";
+    // };
+};

@@ -1,0 +1,260 @@
+# =============================================================================
+# OpenBMC 64 MB UBI Flash Layout (A/B Redundant)
+# =============================================================================
+#
+# Platform:    AST2600 with 64 MB (512 Mbit) SPI-NOR flash
+# Layout:      Fixed U-Boot partition + UBI managed volumes
+# Filesystem:  squashfs (read-only rootfs in UBI) + UBIFS (read-write data)
+# Update:      A/B redundant scheme for safe firmware updates
+#
+# UBI (Unsorted Block Images) provides wear-leveling, bad block management,
+# and dynamic volume sizing on top of raw NAND/NOR flash. This layout is
+# used by platforms that require reliable A/B firmware updates and have
+# 64 MB or larger flash parts.
+#
+# Reference: meta-phosphor/classes/image_types_phosphor.bbclass
+#            meta-phosphor/classes/obmc-phosphor-image.bbclass
+#
+# =============================================================================
+#
+# PHYSICAL FLASH LAYOUT (MTD level)
+# =============================================================================
+#
+#  Offset        Size         MTD Partition     Contents
+# -----------+------------+------------------+-------------------------------
+#
+#  0x0000_0000                 +------------------+
+#             |  512 KB    |  U-Boot (SPL+FW)  |  Fixed bootloader partition
+#             |  0x80000   |  [mtd0]           |  Not managed by UBI
+#  0x0008_0000 +------------------+
+#             |  128 KB    |  U-Boot Env       |  Boot environment variables
+#             |  0x20000   |  [mtd1]           |  (primary + redundant)
+#  0x000A_0000 +------------------+
+#             |            |                   |
+#             |  63.375 MB |  UBI Device       |  UBI manages all remaining
+#             |  0x3F60000 |  [mtd2]           |  flash as a single UBI device
+#             |            |                   |  with multiple logical volumes
+#             |            |                   |
+#  0x0400_0000 +------------------+
+#                            END (64 MB)
+#
+# =============================================================================
+#
+# UBI VOLUME LAYOUT (inside mtd2)
+# =============================================================================
+#
+# UBI dynamically allocates physical erase blocks (PEBs) to logical volumes.
+# The sizes below are the reserved/maximum sizes for each volume. UBI
+# overhead (headers, wear-leveling reserve) consumes approximately 2-4% of
+# the raw partition.
+#
+#   +-------------------------------------------------------------------+
+#   |                      UBI Device (mtd2)                            |
+#   |                      ~63.4 MB raw / ~60.5 MB usable              |
+#   |                                                                   |
+#   |  +-------------------------------------------------------------+ |
+#   |  |  Volume 0: kernel-a                                         | |
+#   |  |  Size: 4.25 MB (0x440000)                                   | |
+#   |  |  Type: static                                               | |
+#   |  |  Contents: FIT image (zImage + DTB)                         | |
+#   |  |  Purpose: Active kernel (boot side A)                       | |
+#   |  +-------------------------------------------------------------+ |
+#   |                                                                   |
+#   |  +-------------------------------------------------------------+ |
+#   |  |  Volume 1: rootfs-a                                         | |
+#   |  |  Size: 20 MB (0x1400000)                                    | |
+#   |  |  Type: static                                               | |
+#   |  |  Contents: squashfs image                                   | |
+#   |  |  Purpose: Active read-only rootfs (boot side A)             | |
+#   |  +-------------------------------------------------------------+ |
+#   |                                                                   |
+#   |  +-------------------------------------------------------------+ |
+#   |  |  Volume 2: kernel-b                                         | |
+#   |  |  Size: 4.25 MB (0x440000)                                   | |
+#   |  |  Type: static                                               | |
+#   |  |  Contents: FIT image (zImage + DTB)                         | |
+#   |  |  Purpose: Alternate kernel (boot side B)                    | |
+#   |  +-------------------------------------------------------------+ |
+#   |                                                                   |
+#   |  +-------------------------------------------------------------+ |
+#   |  |  Volume 3: rootfs-b                                         | |
+#   |  |  Size: 20 MB (0x1400000)                                    | |
+#   |  |  Type: static                                               | |
+#   |  |  Contents: squashfs image                                   | |
+#   |  |  Purpose: Alternate read-only rootfs (boot side B)          | |
+#   |  +-------------------------------------------------------------+ |
+#   |                                                                   |
+#   |  +-------------------------------------------------------------+ |
+#   |  |  Volume 4: rwfs                                             | |
+#   |  |  Size: ~11.7 MB (dynamic, uses remaining space)             | |
+#   |  |  Type: dynamic                                              | |
+#   |  |  Filesystem: UBIFS                                          | |
+#   |  |  Contents:                                                  | |
+#   |  |    - /var/persist/ (persistent configuration)               | |
+#   |  |    - Network settings                                       | |
+#   |  |    - User accounts and certificates                         | |
+#   |  |    - SEL / event log entries                                | |
+#   |  |    - BIOS settings cache                                    | |
+#   |  |  Purpose: Read-write persistent data (shared across A/B)    | |
+#   |  +-------------------------------------------------------------+ |
+#   |                                                                   |
+#   |  [UBI overhead: ~2.5 MB for PEB headers, wear-leveling pool,    |
+#   |   volume table, and internal bookkeeping]                        |
+#   |                                                                   |
+#   +-------------------------------------------------------------------+
+#
+# =============================================================================
+#
+# VOLUME SIZE SUMMARY
+# =============================================================================
+#
+#   Volume        Name        Type       Size        Size (hex)
+#   ------------- ----------- ---------- ----------- ----------
+#   vol0          kernel-a    static     4.25 MB     0x0440000
+#   vol1          rootfs-a    static     20 MB       0x1400000
+#   vol2          kernel-b    static     4.25 MB     0x0440000
+#   vol3          rootfs-b    static     20 MB       0x1400000
+#   vol4          rwfs        dynamic    ~11.7 MB    (remaining)
+#   ------------- ----------- ---------- ----------- ----------
+#   UBI overhead                         ~2.5 MB
+#   ------------- ----------- ---------- ----------- ----------
+#   TOTAL (mtd2)                         ~63.4 MB    0x3F60000
+#
+# =============================================================================
+#
+# A/B UPDATE FLOW
+# =============================================================================
+#
+#   Current boot: Side A (kernel-a + rootfs-a)
+#
+#   1. New firmware image arrives (via Redfish or IPMI)
+#   2. phosphor-software-manager writes kernel to kernel-b (vol2)
+#   3. phosphor-software-manager writes rootfs to rootfs-b (vol3)
+#   4. U-Boot env updated: bootside=B
+#   5. BMC reboots into Side B
+#   6. If Side B fails, watchdog triggers fallback to Side A
+#
+#   U-Boot environment variables:
+#     bootside=A          # or B
+#     bootcmd=run bootcmd_${bootside}
+#     bootcmd_A=ubi read ${loadaddr} kernel-a; bootm ${loadaddr}
+#     bootcmd_B=ubi read ${loadaddr} kernel-b; bootm ${loadaddr}
+#     bootlimit=3         # Fallback after 3 failed boots
+#     bootcount=0         # Reset on successful boot
+#
+# =============================================================================
+#
+# MACHINE CONFIGURATION VARIABLES
+# =============================================================================
+#
+# These variables in your machine .conf enable UBI layout:
+#
+#   FLASH_SIZE         = "65536"       # Total flash in KB (64 MB)
+#   FLASH_UBOOT_OFFSET = "0"          # U-Boot start
+#   FLASH_UBOOT_ENV_OFFSET = "512"    # Env start (KB) = 0x80000
+#   FLASH_UBI_OFFSET   = "640"        # UBI device start (KB) = 0xA0000
+#
+#   # Enable UBI support
+#   OBMC_MACHINE_FEATURES += "obmc-ubi-fs"
+#
+#   # Volume sizes
+#   FLASH_UBI_KERNEL_SIZE  = "4352"    # 4.25 MB per kernel slot
+#   FLASH_UBI_ROFS_SIZE    = "20480"   # 20 MB per rootfs slot
+#   # rwfs gets whatever remains
+#
+# =============================================================================
+#
+# DEVICE TREE (DTS) PARTITION MAP
+# =============================================================================
+#
+# Only the fixed partitions (U-Boot, env) are in the device tree. UBI
+# volumes are managed dynamically. Example DTS:
+#
+#   &fmc {
+#       status = "okay";
+#       flash@0 {
+#           status = "okay";
+#           label = "bmc";
+#           m25p,fast-read;
+#           spi-max-frequency = <50000000>;
+#           #address-cells = <1>;
+#           #size-cells = <1>;
+#
+#           partitions {
+#               compatible = "fixed-partitions";
+#               #address-cells = <1>;
+#               #size-cells = <1>;
+#
+#               u-boot@0 {
+#                   reg = <0x000000 0x080000>;
+#                   label = "u-boot";
+#               };
+#               u-boot-env@80000 {
+#                   reg = <0x080000 0x020000>;
+#                   label = "u-boot-env";
+#               };
+#               ubi@a0000 {
+#                   reg = <0x0a0000 0x3f60000>;
+#                   label = "ubi";
+#               };
+#           };
+#       };
+#   };
+#
+# =============================================================================
+#
+# CHECKING ON A RUNNING SYSTEM
+# =============================================================================
+#
+#   # View MTD partitions
+#   root@bmc:~# cat /proc/mtd
+#   dev:    size   erasesize  name
+#   mtd0: 00080000 00010000 "u-boot"
+#   mtd1: 00020000 00010000 "u-boot-env"
+#   mtd2: 03f60000 00010000 "ubi"
+#
+#   # View UBI device info
+#   root@bmc:~# ubinfo /dev/ubi0
+#   ubi0
+#   Volumes count:                       5
+#   Logical eraseblock size:             65408 bytes
+#   Total amount of logical eraseblocks: 1014
+#   Amount of available logical eraseblocks: 0
+#   Maximum count of volumes:            128
+#   Count of bad physical eraseblocks:   0
+#   Current maximum erase counter value: 2
+#
+#   # View UBI volumes
+#   root@bmc:~# ubinfo /dev/ubi0 -a
+#   Volume ID:   0 (kernel-a)     Size: 68 LEBs, 4.25 MiB, static
+#   Volume ID:   1 (rootfs-a)     Size: 320 LEBs, 20.0 MiB, static
+#   Volume ID:   2 (kernel-b)     Size: 68 LEBs, 4.25 MiB, static
+#   Volume ID:   3 (rootfs-b)     Size: 320 LEBs, 20.0 MiB, static
+#   Volume ID:   4 (rwfs)         Size: 188 LEBs, 11.7 MiB, dynamic
+#
+#   # Check UBIFS mount
+#   root@bmc:~# df -h /run/initramfs/rw
+#   Filesystem      Size  Used Avail Use% Mounted on
+#   ubi0:rwfs       11M   3.2M  7.8M  29% /run/initramfs/rw
+#
+#   # Check active boot side
+#   root@bmc:~# fw_printenv bootside
+#   bootside=A
+#
+# =============================================================================
+#
+# COMPARISON: 32 MB STATIC vs 64 MB UBI
+# =============================================================================
+#
+#   Feature             32 MB Static MTD     64 MB UBI (A/B)
+#   ------------------- -------------------- --------------------
+#   Total flash         32 MB                64 MB
+#   Wear leveling       None (raw NOR)       UBI wear leveling
+#   Bad block mgmt      None                 UBI handles it
+#   A/B redundancy      No                   Yes (kernel + rootfs)
+#   Max rootfs size     ~23.75 MB            ~20 MB per slot
+#   RW data space       ~3.5 MB (JFFS2)     ~11.7 MB (UBIFS)
+#   Update safety       Risk of brick        Safe A/B fallback
+#   Boot time           Faster (direct MTD)  Slightly slower (UBI attach)
+#
+# =============================================================================

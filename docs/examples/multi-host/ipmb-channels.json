@@ -1,0 +1,108 @@
+{
+    "__comment": "IPMB channel configuration for a 4-host sled platform.",
+    "__comment2": "Each channel maps an IPMB bridge instance to a specific I2C bus and target address.",
+    "__comment3": "Install to: /usr/share/ipmi-providers/ipmb-channels.json",
+
+    "channels": [
+        {
+            "__comment": "Host 0 IPMB channel - I2C bus 2",
+            "type": "ipmb",
+            "slave-path": "/dev/ipmb-2",
+            "bmc-addr": "0x10",
+            "remote-addr": "0x20",
+            "bus": 2,
+            "host-id": 0,
+            "devIndex": 0
+        },
+        {
+            "__comment": "Host 1 IPMB channel - I2C bus 3",
+            "type": "ipmb",
+            "slave-path": "/dev/ipmb-3",
+            "bmc-addr": "0x10",
+            "remote-addr": "0x20",
+            "bus": 3,
+            "host-id": 1,
+            "devIndex": 1
+        },
+        {
+            "__comment": "Host 2 IPMB channel - I2C bus 4",
+            "type": "ipmb",
+            "slave-path": "/dev/ipmb-4",
+            "bmc-addr": "0x10",
+            "remote-addr": "0x20",
+            "bus": 4,
+            "host-id": 2,
+            "devIndex": 2
+        },
+        {
+            "__comment": "Host 3 IPMB channel - I2C bus 5",
+            "type": "ipmb",
+            "slave-path": "/dev/ipmb-5",
+            "bmc-addr": "0x10",
+            "remote-addr": "0x20",
+            "bus": 5,
+            "host-id": 3,
+            "devIndex": 3
+        }
+    ],
+
+    "__field_reference": {
+        "__comment": "Field descriptions for each channel entry (not parsed at runtime).",
+        "type": "Channel type. Use 'ipmb' for I2C-based IPMB bridges or 'me' for Intel ME.",
+        "slave-path": "Linux device path for the IPMB slave device. The kernel ipmb-dev-int driver creates /dev/ipmb-N when the i2c-slave-ipmb driver is bound to an I2C bus.",
+        "bmc-addr": "7-bit I2C slave address of the BMC on this IPMB bus. Typically 0x10 (IPMB standard BMC address). The BMC listens on this address for incoming IPMB requests.",
+        "remote-addr": "7-bit I2C target address of the remote host bridge IC on this bus. Typically 0x20 (standard IPMB responder address). The BMC sends IPMB requests to this address.",
+        "bus": "Linux I2C bus number corresponding to the physical bus wired to this host sled connector.",
+        "host-id": "Logical host index (0-based). Maps this IPMB channel to an OpenBMC host instance for multi-host power management and sensor association.",
+        "devIndex": "Channel index used internally by ipmb-bridge to identify this channel. Must be unique across all channels."
+    },
+
+    "__device_tree_setup": {
+        "__comment": "Device tree configuration required for IPMB slave devices. Add these nodes to your AST2600 device tree to enable the ipmb-dev-int driver on each bus.",
+        "example_dts": [
+            "&i2c2 {",
+            "    status = \"okay\";",
+            "    ipmb@10 {",
+            "        compatible = \"ipmb-dev\";",
+            "        reg = <(0x10 | I2C_OWN_SLAVE_ADDRESS)>;",
+            "        i2c-protocol;",
+            "    };",
+            "};",
+            "",
+            "&i2c3 {",
+            "    status = \"okay\";",
+            "    ipmb@10 {",
+            "        compatible = \"ipmb-dev\";",
+            "        reg = <(0x10 | I2C_OWN_SLAVE_ADDRESS)>;",
+            "        i2c-protocol;",
+            "    };",
+            "};",
+            "",
+            "&i2c4 {",
+            "    status = \"okay\";",
+            "    ipmb@10 {",
+            "        compatible = \"ipmb-dev\";",
+            "        reg = <(0x10 | I2C_OWN_SLAVE_ADDRESS)>;",
+            "        i2c-protocol;",
+            "    };",
+            "};",
+            "",
+            "&i2c5 {",
+            "    status = \"okay\";",
+            "    ipmb@10 {",
+            "        compatible = \"ipmb-dev\";",
+            "        reg = <(0x10 | I2C_OWN_SLAVE_ADDRESS)>;",
+            "        i2c-protocol;",
+            "    };",
+            "};"
+        ]
+    },
+
+    "__kernel_config": {
+        "__comment": "Required kernel configuration options for IPMB support.",
+        "options": [
+            "CONFIG_I2C_SLAVE=y",
+            "CONFIG_IPMB_DEVICE_INTERFACE=m"
+        ]
+    }
+}

@@ -1,0 +1,86 @@
+{
+    "_comment": "phosphor-multi-gpio-monitor presence detection configuration.",
+    "_comment_install": "Install to /etc/phosphor-multi-gpio-presence.json on the BMC.",
+    "_comment_purpose": "Monitors GPIO presence pins for field-replaceable units (FRUs). Each entry maps a GPIO line to an inventory D-Bus object. When the GPIO is asserted the 'Present' property is set to true; when deasserted it is set to false.",
+    "_comment_naming": "GPIO names ending in _PRSNT_N are active-low (low = present). The daemon handles the polarity inversion internally.",
+
+    "gpio_configs": [
+        {
+            "_comment": "PSU 0 presence -- active low. Tracks whether the first power supply is seated in its bay. Used by phosphor-psu-monitor for power redundancy calculations.",
+            "name": "PSU0_PRSNT_N",
+            "direction": "BOTH",
+            "target": "",
+            "continue": true,
+            "inventory": "/xyz/openbmc_project/inventory/system/chassis/motherboard/powersupply0",
+            "extra_interfaces": [
+                "xyz.openbmc_project.Inventory.Item.PowerSupply"
+            ]
+        },
+        {
+            "_comment": "PSU 1 presence -- active low. Second power supply slot for redundant configurations.",
+            "name": "PSU1_PRSNT_N",
+            "direction": "BOTH",
+            "target": "",
+            "continue": true,
+            "inventory": "/xyz/openbmc_project/inventory/system/chassis/motherboard/powersupply1",
+            "extra_interfaces": [
+                "xyz.openbmc_project.Inventory.Item.PowerSupply"
+            ]
+        },
+        {
+            "_comment": "DIMM A0 presence -- active low. Indicates whether the memory module in slot A0 is populated. Presence data feeds into the host inventory and Redfish Memory collection.",
+            "name": "DIMM_A0_PRSNT_N",
+            "direction": "BOTH",
+            "target": "",
+            "continue": true,
+            "inventory": "/xyz/openbmc_project/inventory/system/chassis/motherboard/dimm0",
+            "extra_interfaces": [
+                "xyz.openbmc_project.Inventory.Item.Dimm"
+            ]
+        },
+        {
+            "_comment": "DIMM B0 presence -- active low. Second memory channel slot.",
+            "name": "DIMM_B0_PRSNT_N",
+            "direction": "BOTH",
+            "target": "",
+            "continue": true,
+            "inventory": "/xyz/openbmc_project/inventory/system/chassis/motherboard/dimm1",
+            "extra_interfaces": [
+                "xyz.openbmc_project.Inventory.Item.Dimm"
+            ]
+        },
+        {
+            "_comment": "PCIe riser card 0 presence -- active low. Riser card that holds add-in cards (GPUs, NICs) in slot 0. Absence may indicate a maintenance event.",
+            "name": "RISER0_PRSNT_N",
+            "direction": "BOTH",
+            "target": "",
+            "continue": true,
+            "inventory": "/xyz/openbmc_project/inventory/system/chassis/motherboard/riser0",
+            "extra_interfaces": [
+                "xyz.openbmc_project.Inventory.Item.Board"
+            ]
+        },
+        {
+            "_comment": "NVMe drive 0 presence -- active low. Front-panel hot-swap drive bay 0. Monitored continuously to update Redfish Storage/Drive inventory on hot-plug events.",
+            "name": "NVME0_PRSNT_N",
+            "direction": "BOTH",
+            "target": "",
+            "continue": true,
+            "inventory": "/xyz/openbmc_project/inventory/system/chassis/motherboard/nvme0",
+            "extra_interfaces": [
+                "xyz.openbmc_project.Inventory.Item.Drive"
+            ]
+        },
+        {
+            "_comment": "NVMe drive 1 presence -- active low. Front-panel hot-swap drive bay 1.",
+            "name": "NVME1_PRSNT_N",
+            "direction": "BOTH",
+            "target": "",
+            "continue": true,
+            "inventory": "/xyz/openbmc_project/inventory/system/chassis/motherboard/nvme1",
+            "extra_interfaces": [
+                "xyz.openbmc_project.Inventory.Item.Drive"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,333 @@
+// phosphor-regulators Configuration: PMBus PSU Monitoring
+//
+// This file configures the phosphor-regulators application for PMBus PSU
+// voltage rail monitoring and management. phosphor-regulators provides:
+//   1. Voltage regulator configuration (set output voltage, margins)
+//   2. Sensor monitoring (periodic polling of voltage, current, temperature)
+//   3. Presence detection (check if PSU is physically installed)
+//   4. Phase fault detection (multi-phase VRM fault monitoring)
+//
+// Install to: /usr/share/phosphor-regulators/config.json
+//
+// The JSON schema is defined at:
+//   https://github.com/openbmc/phosphor-power/blob/master/phosphor-regulators/schema/config_schema.json
+//
+// Key structure:
+//   rules[]    - Reusable action sequences (read sensors, set voltage, detect presence)
+//   chassis[]  - Physical chassis containing devices
+//     devices[]  - I2C regulator/PSU devices
+//       rails[]    - Voltage rails provided by each device
+
+{
+    // =========================================================================
+    // Rules: reusable action sequences referenced by devices and rails
+    // =========================================================================
+    "rules": [
+        {
+            // Rule: detect_psu_presence
+            // Checks if the PSU is physically present by querying the FRU
+            // inventory path. Returns true if the FRU is marked present.
+            "id": "detect_psu_presence",
+            "actions": [
+                {
+                    "compare_presence": {
+                        // D-Bus inventory path for the PSU FRU object
+                        "fru": "/xyz/openbmc_project/inventory/system/chassis/motherboard/powersupply0",
+                        "value": true
+                    }
+                }
+            ]
+        },
+        {
+            // Rule: set_psu_vout
+            // Writes the output voltage set-point via PMBus VOUT_COMMAND (0x21).
+            // Uses linear data format with exponent -8 for millivolt precision.
+            // The actual voltage value is specified per-device in "configuration.volts".
+            "id": "set_psu_vout",
+            "actions": [
+                {
+                    "pmbus_write_vout_command": {
+                        // PMBus data format for VOUT_COMMAND:
+                        //   "linear" = Linear16 format (5-bit exponent + 11-bit mantissa)
+                        //   Actual voltage = mantissa * 2^exponent
+                        "format": "linear",
+
+                        // Exponent for voltage encoding precision.
+                        // -8 gives ~3.9mV resolution (1/256 V), suitable for 12V rails.
+                        // Use -10 for finer resolution on low-voltage rails (e.g., 1.0V CPU).
+                        "exponent": -8
+                    }
+                }
+            ]
+        },
+        {
+            // Rule: read_psu_sensors
+            // Reads voltage, current, power, and temperature sensors from
+            // the PSU via PMBus commands. Each pmbus_read_sensor action
+            // reads one register and publishes the value to D-Bus.
+            "id": "read_psu_sensors",
+            "actions": [
+                {
+                    // READ_VOUT (0x8B): Output voltage in Linear16 format
+                    "pmbus_read_sensor": {
+                        "type": "vout",
+                        "command": "0x8B",
+                        "format": "linear_16"
+                    }
+                },
+                {
+                    // READ_IOUT (0x8C): Output current in Linear11 format
+                    // Linear11 = 5-bit signed exponent + 11-bit signed mantissa
+                    "pmbus_read_sensor": {
+                        "type": "iout",
+                        "command": "0x8C",
+                        "format": "linear_11"
+                    }
+                },
+                {
+                    // READ_VIN (0x88): Input voltage in Linear11 format
+                    "pmbus_read_sensor": {
+                        "type": "vin",
+                        "command": "0x88",
+                        "format": "linear_11"
+                    }
+                },
+                {
+                    // READ_IIN (0x89): Input current in Linear11 format
+                    "pmbus_read_sensor": {
+                        "type": "iin",
+                        "command": "0x89",
+                        "format": "linear_11"
+                    }
+                },
+                {
+                    // READ_PIN (0x97): Input power in Linear11 format
+                    "pmbus_read_sensor": {
+                        "type": "pin",
+                        "command": "0x97",
+                        "format": "linear_11"
+                    }
+                },
+                {
+                    // READ_POUT (0x96): Output power in Linear11 format
+                    "pmbus_read_sensor": {
+                        "type": "pout",
+                        "command": "0x96",
+                        "format": "linear_11"
+                    }
+                },
+                {
+                    // READ_TEMPERATURE_1 (0x8D): Primary temperature in Linear11
+                    "pmbus_read_sensor": {
+                        "type": "temperature",
+                        "command": "0x8D",
+                        "format": "linear_11"
+                    }
+                },
+                {
+                    // READ_TEMPERATURE_2 (0x8E): Secondary temperature in Linear11
+                    "pmbus_read_sensor": {
+                        "type": "temperature_peak",
+                        "command": "0x8E",
+                        "format": "linear_11"
+                    }
+                }
+            ]
+        },
+        {
+            // Rule: read_psu_status
+            // Reads PMBus status registers to check for faults and warnings.
+            // STATUS_WORD (0x79) provides a summary of all fault conditions.
+            // STATUS_VOUT (0x7A), STATUS_IOUT (0x7B), etc. provide details.
+            "id": "read_psu_status",
+            "actions": [
+                {
+                    // Read STATUS_WORD: 2-byte summary of all faults
+                    "i2c_compare_bytes": {
+                        "register": "0x79",
+                        "values": ["0x00", "0x00"],
+                        "masks": ["0xFF", "0xFF"]
+                    }
+                }
+            ]
+        }
+    ],
+
+    // =========================================================================
+    // Chassis: physical enclosure(s) containing PSU devices
+    // =========================================================================
+    "chassis": [
+        {
+            // Chassis number (1-based). Multi-chassis systems use unique numbers.
+            "number": 1,
+
+            // D-Bus inventory path for this chassis object
+            "inventory_path": "/xyz/openbmc_project/inventory/system/chassis",
+
+            "devices": [
+                // =============================================================
+                // PSU0: Primary power supply
+                // =============================================================
+                {
+                    // Unique device identifier within this configuration
+                    "id": "psu0",
+
+                    // This device is a voltage regulator (provides output rails)
+                    "is_regulator": true,
+
+                    // D-Bus inventory path for this PSU's FRU data
+                    // (manufacturer, model, serial number, part number)
+                    "fru": "/xyz/openbmc_project/inventory/system/chassis/motherboard/powersupply0",
+
+                    // I2C connection to the PSU PMBus interface
+                    "i2c_interface": {
+                        // I2C bus number (matches device tree i2c node)
+                        "bus": 3,
+                        // 7-bit I2C address in hex
+                        "address": "0x58"
+                    },
+
+                    // Presence detection: skip configuration if PSU is absent
+                    "presence_detection": {
+                        "rule_id": "detect_psu_presence"
+                    },
+
+                    // Configuration: applied once when PSU is first detected
+                    // Sets the output voltage to 12.0V using VOUT_COMMAND
+                    "configuration": {
+                        "volts": 12.0,
+                        "rule_id": "set_psu_vout"
+                    },
+
+                    // Voltage rails provided by this PSU
+                    "rails": [
+                        {
+                            // Rail identifier: used in D-Bus sensor object paths
+                            "id": "psu0_12v",
+
+                            // Sensor monitoring: polled periodically by the
+                            // regulators daemon to read voltage, current, etc.
+                            "sensor_monitoring": {
+                                "rule_id": "read_psu_sensors"
+                            }
+                        }
+                    ]
+                },
+
+                // =============================================================
+                // PSU1: Redundant power supply
+                // =============================================================
+                {
+                    "id": "psu1",
+                    "is_regulator": true,
+                    "fru": "/xyz/openbmc_project/inventory/system/chassis/motherboard/powersupply1",
+
+                    "i2c_interface": {
+                        "bus": 3,
+                        "address": "0x59"
+                    },
+
+                    "presence_detection": {
+                        // Reuse the same presence detection rule.
+                        // In production, create a separate rule per PSU with
+                        // distinct FRU paths.
+                        "actions": [
+                            {
+                                "compare_presence": {
+                                    "fru": "/xyz/openbmc_project/inventory/system/chassis/motherboard/powersupply1",
+                                    "value": true
+                                }
+                            }
+                        ]
+                    },
+
+                    "configuration": {
+                        "volts": 12.0,
+                        "rule_id": "set_psu_vout"
+                    },
+
+                    "rails": [
+                        {
+                            "id": "psu1_12v",
+                            "sensor_monitoring": {
+                                "rule_id": "read_psu_sensors"
+                            }
+                        }
+                    ]
+                },
+
+                // =============================================================
+                // VDD_CPU: CPU core voltage regulator (on-board VRM)
+                // Included to show a non-PSU regulator device alongside PSUs
+                // =============================================================
+                {
+                    "id": "vdd_cpu0",
+                    "is_regulator": true,
+                    "fru": "/xyz/openbmc_project/inventory/system/chassis/motherboard/cpu0",
+
+                    "i2c_interface": {
+                        // CPU VRM is typically on a different I2C bus
+                        "bus": 1,
+                        "address": "0x40"
+                    },
+
+                    "presence_detection": {
+                        "actions": [
+                            {
+                                "compare_presence": {
+                                    "fru": "/xyz/openbmc_project/inventory/system/chassis/motherboard/cpu0",
+                                    "value": true
+                                }
+                            }
+                        ]
+                    },
+
+                    // CPU core voltage: 1.0V nominal, set via VOUT_COMMAND
+                    // Use finer exponent (-10) for millivolt-level precision
+                    "configuration": {
+                        "volts": 1.0,
+                        "actions": [
+                            {
+                                "pmbus_write_vout_command": {
+                                    "format": "linear",
+                                    "exponent": -10
+                                }
+                            }
+                        ]
+                    },
+
+                    "rails": [
+                        {
+                            "id": "vdd_cpu0",
+                            "sensor_monitoring": {
+                                "actions": [
+                                    {
+                                        "pmbus_read_sensor": {
+                                            "type": "vout",
+                                            "command": "0x8B",
+                                            "format": "linear_16"
+                                        }
+                                    },
+                                    {
+                                        "pmbus_read_sensor": {
+                                            "type": "iout",
+                                            "command": "0x8C",
+                                            "format": "linear_11"
+                                        }
+                                    },
+                                    {
+                                        "pmbus_read_sensor": {
+                                            "type": "temperature",
+                                            "command": "0x8D",
+                                            "format": "linear_11"
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

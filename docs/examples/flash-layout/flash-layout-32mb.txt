@@ -1,0 +1,175 @@
+# =============================================================================
+# OpenBMC 32 MB Static MTD Flash Layout
+# =============================================================================
+#
+# Platform:    AST2500 / AST2600 with 32 MB (256 Mbit) SPI-NOR flash
+# Layout:      Static MTD partitions (no UBI)
+# Filesystem:  squashfs (read-only rootfs) + JFFS2 (read-write data)
+#
+# This is the default layout used by most OpenBMC platforms with 32 MB flash.
+# Partition offsets are defined in the machine .conf file and encoded into
+# the device tree by the u-boot-aspeed recipe.
+#
+# Reference: meta-phosphor/classes/image_types_phosphor.bbclass
+#            meta-aspeed/conf/machine/include/aspeed.inc
+#
+# =============================================================================
+#
+#  Offset        Size         Partition          Filesystem / Contents
+# -----------+------------+------------------+-------------------------------
+#
+#  0x0000_0000                 +------------------+
+#             |  384 KB    |  U-Boot (SPL+FW)  |  Fixed-size bootloader
+#             |  0x60000   |                   |  Includes SPL (first 64 KB)
+#  0x0006_0000 +------------------+              and full U-Boot firmware.
+#             |  128 KB    |  U-Boot Env       |  Environment variables
+#             |  0x20000   |                   |  (primary + redundant copy)
+#  0x0008_0000 +------------------+
+#             |            |                   |
+#             |  4.25 MB   |  Kernel FIT       |  Flattened Image Tree:
+#             |  0x440000  |  Image            |   - zImage (ARM compressed)
+#             |            |                   |   - Device tree blob (.dtb)
+#             |            |                   |   - FIT configuration
+#  0x004C_0000 +------------------+
+#             |            |                   |
+#             |            |                   |
+#             |  23.75 MB  |  RO Root FS       |  squashfs (XZ compressed)
+#             |  0x17C0000 |  (squashfs)       |  Contains:
+#             |            |                   |   - /usr, /lib, /bin, /sbin
+#             |            |                   |   - systemd services
+#             |            |                   |   - phosphor daemons
+#             |            |                   |   - bmcweb, ipmid, etc.
+#             |            |                   |
+#  0x01C8_0000 +------------------+
+#             |            |                   |
+#             |  3.5 MB    |  RW Data          |  JFFS2 (read-write)
+#             |  0x380000  |  (JFFS2)          |  Persistent storage:
+#             |            |                   |   - /var/persist/
+#             |            |                   |   - Network configuration
+#             |            |                   |   - User accounts / certs
+#             |            |                   |   - SEL / event logs
+#             |            |                   |   - Host firmware (if small)
+#  0x0200_0000 +------------------+
+#                            END (32 MB)
+#
+# =============================================================================
+#
+# PARTITION OFFSET SUMMARY
+# =============================================================================
+#
+#   Partition      Start         End          Size       Size (hex)
+#   -------------- ------------- ------------ ---------- ----------
+#   u-boot         0x0000_0000   0x0005_FFFF   384 KB    0x060000
+#   u-boot-env     0x0006_0000   0x0007_FFFF   128 KB    0x020000
+#   kernel         0x0008_0000   0x004B_FFFF   4.25 MB   0x440000
+#   rootfs (RO)    0x004C_0000   0x01C7_FFFF   23.75 MB  0x17C0000
+#   rwfs (RW)      0x01C8_0000   0x01FF_FFFF   3.5 MB    0x380000
+#   -------------- ------------- ------------ ---------- ----------
+#   TOTAL                                      32 MB     0x2000000
+#
+# =============================================================================
+#
+# MACHINE CONFIGURATION VARIABLES
+# =============================================================================
+#
+# These variables in your machine .conf control the layout:
+#
+#   FLASH_SIZE      = "32768"        # Total flash in KB
+#   FLASH_UBOOT_OFFSET   = "0"      # U-Boot start
+#   FLASH_UBOOT_ENV_OFFSET = "384"  # Env start (KB)
+#   FLASH_KERNEL_OFFSET = "512"     # Kernel start (KB)  = 0x80000
+#   FLASH_ROFS_OFFSET   = "4864"    # RO rootfs start (KB) = 0x4C0000
+#   FLASH_RWFS_OFFSET   = "29184"   # RW data start (KB) = 0x1C80000
+#
+# =============================================================================
+#
+# DEVICE TREE (DTS) PARTITION MAP
+# =============================================================================
+#
+# The following device tree fragment defines the static MTD partitions.
+# This is typically in aspeed-bmc-<vendor>-<board>.dts:
+#
+#   &fmc {
+#       status = "okay";
+#       flash@0 {
+#           status = "okay";
+#           label = "bmc";
+#           m25p,fast-read;
+#           spi-max-frequency = <50000000>;
+#           #address-cells = <1>;
+#           #size-cells = <1>;
+#
+#           partitions {
+#               compatible = "fixed-partitions";
+#               #address-cells = <1>;
+#               #size-cells = <1>;
+#
+#               u-boot@0 {
+#                   reg = <0x000000 0x060000>;
+#                   label = "u-boot";
+#               };
+#               u-boot-env@60000 {
+#                   reg = <0x060000 0x020000>;
+#                   label = "u-boot-env";
+#               };
+#               kernel@80000 {
+#                   reg = <0x080000 0x440000>;
+#                   label = "kernel";
+#               };
+#               rofs@4c0000 {
+#                   reg = <0x4c0000 0x17c0000>;
+#                   label = "rofs";
+#               };
+#               rwfs@1c80000 {
+#                   reg = <0x1c80000 0x380000>;
+#                   label = "rwfs";
+#               };
+#           };
+#       };
+#   };
+#
+# =============================================================================
+#
+# CHECKING ON A RUNNING SYSTEM
+# =============================================================================
+#
+#   # View MTD partition table
+#   root@bmc:~# cat /proc/mtd
+#   dev:    size   erasesize  name
+#   mtd0: 00060000 00010000 "u-boot"
+#   mtd1: 00020000 00010000 "u-boot-env"
+#   mtd2: 00440000 00010000 "kernel"
+#   mtd3: 017c0000 00010000 "rofs"
+#   mtd4: 00380000 00010000 "rwfs"
+#
+#   # Check mounted filesystems
+#   root@bmc:~# df -h
+#   Filesystem      Size  Used Avail Use% Mounted on
+#   /dev/root        24M   22M   0   100% /
+#   tmpfs            64M  1.2M   63M   2% /tmp
+#   tmpfs            64M  288K   64M   1% /run
+#   /dev/mtdblock4  3.5M  1.8M  1.7M  52% /run/initramfs/rw
+#
+# =============================================================================
+#
+# OPTIMIZATION NOTES
+# =============================================================================
+#
+# On a 32 MB flash part, space is tight. Common issues:
+#
+#  1. rootfs exceeds 23.75 MB -- image build fails
+#     -> Remove unused packages (see image-size-reduction.conf)
+#     -> Switch from gzip to XZ compression for squashfs
+#     -> Use musl libc instead of glibc
+#
+#  2. rwfs too small for persistent data
+#     -> Reduce rootfs to reclaim space for rwfs
+#     -> Move logs to tmpfs (volatile)
+#     -> Compress persistent data
+#
+#  3. Kernel FIT too large (>4.25 MB)
+#     -> Trim kernel config (disable unused drivers)
+#     -> Use kernel compression (zImage is already compressed)
+#     -> Remove unused DTB overlays from FIT
+#
+# =============================================================================

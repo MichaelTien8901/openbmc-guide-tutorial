@@ -1,0 +1,48 @@
+# sdbusplus YAML Interface Definition
+#
+# Interface: xyz.openbmc_project.Example.Greeting
+#
+# This file defines the D-Bus interface contract for the example greeting
+# service. The sdbus++ tool processes this YAML to generate C++ server and
+# client bindings at build time.
+#
+# YAML schema reference:
+#   https://github.com/openbmc/sdbusplus/blob/master/docs/yaml/interface.md
+#
+# Directory structure mirrors the D-Bus interface name:
+#   xyz/openbmc_project/Example/Greeting.interface.yaml
+#   -> xyz.openbmc_project.Example.Greeting
+
+description: >
+    Provides a simple greeting service. Clients set a Name property and call
+    the Greet method to receive a personalized greeting message. A Greeted
+    signal is emitted each time a greeting is produced.
+
+properties:
+    - name: Name
+      type: string
+      default: "World"
+      description: >
+          The name to include in the greeting message. Defaults to "World"
+          if not explicitly set by a client.
+
+methods:
+    - name: Greet
+      description: >
+          Produce a greeting message using the current value of the Name
+          property. Emits the Greeted signal with the resulting message.
+      returns:
+          - name: Greeting
+            type: string
+            description: >
+                The greeting message, e.g. "Hello, Alice!".
+
+signals:
+    - name: Greeted
+      description: >
+          Emitted each time the Greet method is called successfully.
+      properties:
+          - name: Greeting
+            type: string
+            description: >
+                The greeting message that was produced.

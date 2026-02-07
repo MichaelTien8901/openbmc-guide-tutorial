@@ -55,6 +55,8 @@ Learn how to interact with OpenBMC through its management interfaces.
 | [IPMI]({% link docs/04-interfaces/01-ipmi-guide.md %}) | IPMI protocol, OEM commands | Legacy management, scripting |
 | [Redfish]({% link docs/04-interfaces/02-redfish-guide.md %}) | REST API, modern management | Cloud integration, automation |
 | [WebUI]({% link docs/04-interfaces/03-webui-guide.md %}) | Browser-based management | Human operators |
+| [Redfish Events & Telemetry]({% link docs/04-interfaces/08-redfish-events-telemetry-guide.md %}) | SSE subscriptions, metric reports | Monitoring, alerting |
+| [Redfish OEM Extensions]({% link docs/04-interfaces/09-redfish-oem-extensions-guide.md %}) | Custom OEM resources and actions | Vendor-specific features |
 
 ### Remote Access
 

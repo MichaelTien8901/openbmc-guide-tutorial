@@ -1,0 +1,210 @@
+{
+    "version": "1.0",
+    "comment": "Stepwise (non-PID) zone configuration -- uses a temperature-to-PWM lookup table instead of PID control. Simple, deterministic, and easy to debug. Suitable for platforms with predictable thermal profiles where PID tuning is not required.",
+    "sensors": [
+        {
+            "name": "CPU_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/CPU_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "Inlet_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/Inlet_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "DIMM_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/DIMM_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "Fan0",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan0",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm1",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "Fan1",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan1",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm2",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "Fan2",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan2",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm3",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "Fan3",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan3",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm4",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        }
+    ],
+    "zones": [
+        {
+            "id": 0,
+            "minThermalOutput": 20.0,
+            "failsafePercent": 100.0,
+            "comment": "Single zone -- 20% PWM floor, 100% failsafe"
+        }
+    ],
+    "stepwise": [
+        {
+            "name": "CPU_Stepwise",
+            "type": "stepwise",
+            "inputs": ["CPU_Temp"],
+            "reading": {
+                "positiveHysteresis": 3.0,
+                "negativeHysteresis": 3.0
+            },
+            "output": [
+                { "temp": 0,  "pwm": 20 },
+                { "temp": 40, "pwm": 25 },
+                { "temp": 50, "pwm": 30 },
+                { "temp": 60, "pwm": 40 },
+                { "temp": 65, "pwm": 50 },
+                { "temp": 70, "pwm": 65 },
+                { "temp": 75, "pwm": 80 },
+                { "temp": 80, "pwm": 90 },
+                { "temp": 85, "pwm": 100 }
+            ],
+            "comment": "CPU temperature lookup: 9 steps from idle (20%) to thermal limit (100%). 3C hysteresis prevents rapid toggling at boundary temps."
+        },
+        {
+            "name": "Inlet_Stepwise",
+            "type": "stepwise",
+            "inputs": ["Inlet_Temp"],
+            "reading": {
+                "positiveHysteresis": 2.0,
+                "negativeHysteresis": 2.0
+            },
+            "output": [
+                { "temp": 0,  "pwm": 20 },
+                { "temp": 20, "pwm": 25 },
+                { "temp": 25, "pwm": 35 },
+                { "temp": 30, "pwm": 50 },
+                { "temp": 35, "pwm": 65 },
+                { "temp": 40, "pwm": 80 },
+                { "temp": 45, "pwm": 100 }
+            ],
+            "comment": "Inlet (ambient) temperature lookup: ramps from 25% at 20C to 100% at 45C. 2C hysteresis."
+        },
+        {
+            "name": "DIMM_Stepwise",
+            "type": "stepwise",
+            "inputs": ["DIMM_Temp"],
+            "reading": {
+                "positiveHysteresis": 2.0,
+                "negativeHysteresis": 2.0
+            },
+            "output": [
+                { "temp": 0,  "pwm": 20 },
+                { "temp": 45, "pwm": 25 },
+                { "temp": 55, "pwm": 35 },
+                { "temp": 60, "pwm": 45 },
+                { "temp": 65, "pwm": 60 },
+                { "temp": 70, "pwm": 75 },
+                { "temp": 75, "pwm": 90 },
+                { "temp": 80, "pwm": 100 }
+            ],
+            "comment": "DIMM temperature lookup: 8 steps. DIMMs tolerate higher temps, so the curve starts later."
+        }
+    ],
+    "pid": [
+        {
+            "name": "Fan0_Speed",
+            "type": "fan",
+            "inputs": ["Fan0"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "Fan1_Speed",
+            "type": "fan",
+            "inputs": ["Fan1"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "Fan2_Speed",
+            "type": "fan",
+            "inputs": ["Fan2"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "Fan3_Speed",
+            "type": "fan",
+            "inputs": ["Fan3"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        }
+    ]
+}

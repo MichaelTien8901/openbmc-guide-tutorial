@@ -36,6 +36,9 @@ Monitor hardware health through temperature, voltage, current, and fan sensors.
 | [D-Bus Sensors]({% link docs/03-core-services/01-dbus-sensors-guide.md %}) | ADC, hwmon, virtual sensors |
 | [Hwmon Sensors]({% link docs/03-core-services/02-hwmon-sensors-guide.md %}) | Linux hwmon integration |
 | [Entity Manager]({% link docs/03-core-services/03-entity-manager-guide.md %}) | Hardware discovery and configuration |
+| [GPIO Management]({% link docs/03-core-services/14-gpio-management-guide.md %}) | GPIO monitoring, phosphor-gpio-monitor |
+| [PECI Thermal Monitoring]({% link docs/03-core-services/15-peci-thermal-monitoring-guide.md %}) | CPU temperature via PECI interface |
+| [I2C Device Integration]({% link docs/03-core-services/16-i2c-device-integration-guide.md %}) | I2C device trees, tools, custom drivers |
 
 ### Thermal & Power
 
@@ -45,6 +48,8 @@ Control cooling and power systems to keep hardware within operating limits.
 |-------|-------------|
 | [Fan Control]({% link docs/03-core-services/04-fan-control-guide.md %}) | PID thermal control, zones |
 | [Power Management]({% link docs/03-core-services/05-power-management-guide.md %}) | Power sequencing, regulators |
+| [PSU PMBus Management]({% link docs/03-core-services/17-psu-pmbus-management-guide.md %}) | PSU monitoring via PMBus/phosphor-psu-monitor |
+| [PID Thermal Tuning]({% link docs/03-core-services/19-pid-thermal-tuning-guide.md %}) | PID coefficient tuning methodology |
 
 ### System Services
 
@@ -60,6 +65,7 @@ Essential services for system operation.
 | [Inventory Manager]({% link docs/03-core-services/11-inventory-manager-guide.md %}) | FRU, hardware inventory |
 | [Watchdog]({% link docs/03-core-services/12-watchdog-guide.md %}) | Host watchdog timer |
 | [Buttons]({% link docs/03-core-services/13-buttons-guide.md %}) | Power/reset buttons |
+| [LDAP Integration]({% link docs/03-core-services/18-ldap-integration-guide.md %}) | LDAP/Active Directory authentication |
 
 ## Prerequisites
 

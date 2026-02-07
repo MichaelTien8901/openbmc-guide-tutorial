@@ -1,0 +1,418 @@
+// Entity Manager Configuration: Dual Redundant PMBus PSUs
+//
+// This file configures two PMBus-based power supply units for Entity Manager.
+// Entity Manager uses this to:
+//   1. Discover PSU devices on the I2C bus
+//   2. Create hwmon sensor objects (voltage, current, power, temperature, fan)
+//   3. Apply warning and critical thresholds for each sensor
+//   4. Expose FRU EEPROM data (manufacturer, model, serial number)
+//
+// Install to: /usr/share/entity-manager/configurations/
+//
+// Key concepts:
+//   - "Probe" determines when this config activates. "TRUE" means always active.
+//     For production, use a probe like "xyz.openbmc_project.FruDevice({'BOARD_PRODUCT_NAME': 'MyBoard'})"
+//   - "Type": "pmbus" tells psu-sensor daemon to create hwmon-based sensors
+//   - "Labels" select which PMBus readings to expose as D-Bus sensors
+//   - "Thresholds" define warning (Severity 0) and critical (Severity 1) limits
+//   - "PowerState" restricts sensor reading to specific host power states
+
+{
+    // Board-level identification
+    "Name": "PSU Board",
+    "Type": "Board",
+
+    // Probe expression: determines when this configuration is active.
+    // "TRUE" always matches -- replace with FRU-based probe for production.
+    // Example: "xyz.openbmc_project.FruDevice({'BOARD_PRODUCT_NAME': 'SuperServer'})"
+    "Probe": "TRUE",
+
+    "Exposes": [
+        // =====================================================================
+        // PSU0 -- Primary power supply (I2C bus 3, address 0x58)
+        // =====================================================================
+        {
+            // Sensor name prefix: creates D-Bus objects like
+            // /xyz/openbmc_project/sensors/voltage/PSU0_Input_Voltage
+            "Name": "PSU0",
+
+            // Type "pmbus" tells the PSUSensor daemon to use the PMBus hwmon driver
+            "Type": "pmbus",
+
+            // I2C bus number where the PSU PMBus interface is connected
+            "Bus": 3,
+
+            // 7-bit I2C address of the PSU PMBus interface
+            // Common PSU addresses: 0x58-0x5F (PMBus default) or 0x68-0x6F
+            "Address": "0x58",
+
+            // PMBus sensor labels to expose via hwmon.
+            // Each label maps to a PMBus command:
+            //   vin    -> READ_VIN (0x88)     - Input voltage from AC/DC source
+            //   vout1  -> READ_VOUT (0x8B)    - Output voltage (12V main rail)
+            //   iin    -> READ_IIN (0x89)     - Input current draw
+            //   iout1  -> READ_IOUT (0x8C)    - Output current to system
+            //   pin    -> READ_PIN (0x97)     - Input power consumption
+            //   pout1  -> READ_POUT (0x96)    - Output power delivered
+            //   temp1  -> READ_TEMPERATURE_1  - Primary internal temperature
+            //   temp2  -> READ_TEMPERATURE_2  - Secondary temperature (hotspot)
+            //   fan1   -> READ_FAN_SPEED_1    - Internal cooling fan RPM
+            "Labels": [
+                "vin",
+                "vout1",
+                "iin",
+                "iout1",
+                "pin",
+                "pout1",
+                "temp1",
+                "temp2",
+                "fan1"
+            ],
+
+            // Only read PSU output sensors when the host is powered on.
+            // Options: "On", "BiosPost", "Always"
+            // Input sensors (vin, iin, pin) are readable even with host off,
+            // but output sensors require the PSU to be actively supplying power.
+            "PowerState": "Always",
+
+            // Sensor thresholds define warning and critical limits.
+            // Severity 0 = warning (logged, may trigger LED)
+            // Severity 1 = critical (logged, may trigger protective action)
+            "Thresholds": [
+                // --- Input Voltage (vin) ---
+                // Typical AC-DC PSU expects 200-240V AC input
+                {
+                    "Direction": "less than",
+                    "Label": "vin",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 180
+                },
+                {
+                    "Direction": "less than",
+                    "Label": "vin",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 200
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "vin",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 260
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "vin",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 270
+                },
+
+                // --- Output Voltage (vout1) ---
+                // Typical 12V main rail: nominal 12.0V, +/- 5% tolerance
+                {
+                    "Direction": "less than",
+                    "Label": "vout1",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 11.0
+                },
+                {
+                    "Direction": "less than",
+                    "Label": "vout1",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 11.4
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "vout1",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 12.6
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "vout1",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 13.0
+                },
+
+                // --- Output Current (iout1) ---
+                // Max rated output current depends on PSU wattage and voltage
+                // Example: 2000W PSU at 12V -> ~166A max
+                {
+                    "Direction": "greater than",
+                    "Label": "iout1",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 150
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "iout1",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 170
+                },
+
+                // --- Input Power (pin) ---
+                {
+                    "Direction": "greater than",
+                    "Label": "pin",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 2100
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "pin",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 2300
+                },
+
+                // --- Temperature 1 (primary internal) ---
+                {
+                    "Direction": "greater than",
+                    "Label": "temp1",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 85
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "temp1",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 100
+                },
+
+                // --- Temperature 2 (secondary/hotspot) ---
+                {
+                    "Direction": "greater than",
+                    "Label": "temp2",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 95
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "temp2",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 110
+                },
+
+                // --- Fan Speed ---
+                // Low fan RPM may indicate fan failure
+                {
+                    "Direction": "less than",
+                    "Label": "fan1",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 1000
+                },
+                {
+                    "Direction": "less than",
+                    "Label": "fan1",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 500
+                }
+            ]
+        },
+
+        // =====================================================================
+        // PSU1 -- Redundant power supply (I2C bus 3, address 0x59)
+        // =====================================================================
+        {
+            "Name": "PSU1",
+            "Type": "pmbus",
+            "Bus": 3,
+            "Address": "0x59",
+            "Labels": [
+                "vin",
+                "vout1",
+                "iin",
+                "iout1",
+                "pin",
+                "pout1",
+                "temp1",
+                "temp2",
+                "fan1"
+            ],
+            "PowerState": "Always",
+            "Thresholds": [
+                {
+                    "Direction": "less than",
+                    "Label": "vin",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 180
+                },
+                {
+                    "Direction": "less than",
+                    "Label": "vin",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 200
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "vin",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 260
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "vin",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 270
+                },
+                {
+                    "Direction": "less than",
+                    "Label": "vout1",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 11.0
+                },
+                {
+                    "Direction": "less than",
+                    "Label": "vout1",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 11.4
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "vout1",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 12.6
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "vout1",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 13.0
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "iout1",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 150
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "iout1",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 170
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "pin",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 2100
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "pin",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 2300
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "temp1",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 85
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "temp1",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 100
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "temp2",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 95
+                },
+                {
+                    "Direction": "greater than",
+                    "Label": "temp2",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 110
+                },
+                {
+                    "Direction": "less than",
+                    "Label": "fan1",
+                    "Name": "lower warning",
+                    "Severity": 0,
+                    "Value": 1000
+                },
+                {
+                    "Direction": "less than",
+                    "Label": "fan1",
+                    "Name": "lower critical",
+                    "Severity": 1,
+                    "Value": 500
+                }
+            ]
+        },
+
+        // =====================================================================
+        // PSU0 FRU EEPROM -- stores manufacturer data (serial, model, etc.)
+        // =====================================================================
+        {
+            // FRU EEPROM is on a separate I2C address (typically PMBus addr + 0x08,
+            // or on a dedicated EEPROM chip at 0x50-0x57)
+            "Name": "PSU0 FRU",
+            "Type": "EEPROM",
+            "Bus": 3,
+            "Address": "0x50",
+            "Size": 256
+        },
+
+        // =====================================================================
+        // PSU1 FRU EEPROM
+        // =====================================================================
+        {
+            "Name": "PSU1 FRU",
+            "Type": "EEPROM",
+            "Bus": 3,
+            "Address": "0x51",
+            "Size": 256
+        }
+    ],
+
+    // Inventory properties exposed on D-Bus under
+    // xyz.openbmc_project.Inventory.Item interface
+    "xyz.openbmc_project.Inventory.Item": {
+        "Present": true,
+        "PrettyName": "Power Supply Unit"
+    },
+
+    // Decorator properties for asset tracking
+    "xyz.openbmc_project.Inventory.Decorator.Asset": {
+        "Manufacturer": "",
+        "Model": "",
+        "PartNumber": "",
+        "SerialNumber": ""
+    }
+}

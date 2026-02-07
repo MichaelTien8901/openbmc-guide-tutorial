@@ -63,6 +63,8 @@ Port OpenBMC to your custom hardware platform.
 | [Verification]({% link docs/06-porting/05-verification.md %})           | Testing procedures    | Validation    |
 | [ARM Platform Guide]({% link docs/06-porting/06-arm-platform-guide.md %}) | ARM server platforms | Advanced      |
 | [Entity Manager Advanced]({% link docs/06-porting/07-entity-manager-advanced.md %}) | Dynamic hardware config | Advanced |
+| [Flash Layout Optimization]({% link docs/06-porting/08-flash-layout-optimization-guide.md %}) | SPI flash partitioning, image size reduction | Advanced |
+| [AST2700 Enablement]({% link docs/06-porting/09-ast2700-enablement-guide.md %}) | ASPEED AST2700 next-gen SoC porting | Advanced |
 
 ## Supported BMC SoCs
 

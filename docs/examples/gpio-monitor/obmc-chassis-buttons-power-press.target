@@ -1,0 +1,32 @@
+# Example systemd target: power button short press
+#
+# This target is activated by phosphor-multi-gpio-monitor when the
+# POWER_BUTTON GPIO line sees a FALLING edge (button pressed).
+#
+# Services that need to run on a power button press should declare:
+#   [Install]
+#   WantedBy=obmc-chassis-buttons-power-press.target
+#
+# Typical consumers:
+#   - phosphor-button-handler.service (toggles chassis power state)
+#   - A custom OEM button-handler service
+#
+# Installation:
+#   1. Copy to /lib/systemd/system/obmc-chassis-buttons-power-press.target
+#   2. Run: systemctl daemon-reload
+#   3. Enable any services that should be pulled in by this target
+
+[Unit]
+Description=Power Button Short Press
+Documentation=https://github.com/openbmc/phosphor-gpio-monitor
+
+# Ensure basic system targets are up before handling button events
+Wants=multi-user.target
+After=multi-user.target
+
+# Conflict with long-press target to prevent both firing simultaneously
+Conflicts=obmc-chassis-buttons-power-long-press.target
+
+# Allow this target to be activated multiple times (each button press)
+RefuseManualStop=no
+StopWhenUnneeded=yes

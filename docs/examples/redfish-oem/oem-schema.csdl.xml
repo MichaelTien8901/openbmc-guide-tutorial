@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OEM CSDL Schema Template for Redfish
+
+  This file defines an OEM resource type in CSDL (Common Schema Definition
+  Language), the canonical schema format for OData-based protocols like Redfish.
+
+  Usage:
+    - Place alongside your OEM route handler for documentation
+    - Feed to Redfish Service Validator via - -schema_directory flag
+    - Optionally serve from bmcweb at /redfish/v1/$metadata (advanced)
+
+  TODO: Replace "YourVendor" and "HealthSummary" with your vendor name and
+  resource type. Update properties to match your route handler's JSON output.
+
+  Reference:
+    - DMTF DSP0266 (OData Common Schema Definition Language)
+    - DMTF DSP8010 (Redfish Schema Bundle, for standard type examples)
+    - https://redfish.dmtf.org/schemas/v1/
+-->
+<edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="4.0">
+
+  <!-- Reference standard Redfish types used by our OEM resource -->
+  <edmx:Reference Uri="http://redfish.dmtf.org/schemas/v1/Resource_v1.xml">
+    <edmx:Include Namespace="Resource"/>
+    <edmx:Include Namespace="Resource.v1_0_0"/>
+  </edmx:Reference>
+
+  <edmx:Reference Uri="http://redfish.dmtf.org/schemas/v1/RedfishExtensions_v1.xml">
+    <edmx:Include Namespace="RedfishExtensions.v1_0_0" Alias="Redfish"/>
+  </edmx:Reference>
+
+  <!-- =======================================================================
+       OEM Health Summary Resource
+       Namespace: OemYourVendorHealth.v1_0_0
+
+       TODO: Update the Namespace, EntityType name, and properties below to
+       match the JSON response from your route handler.
+
+       The @odata.type in your route handler must match:
+         #<Namespace>.<TypeName>
+       For this schema:
+         #OemYourVendorHealth.v1_0_0.HealthSummary
+       ======================================================================= -->
+
+  <edmx:DataServices>
+
+    <!-- Unversioned namespace (required by Redfish convention) -->
+    <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm"
+            Namespace="OemYourVendorHealth">
+
+      <EntityType Name="HealthSummary" BaseType="Resource.v1_0_0.Resource"
+                  Abstract="true">
+        <Annotation Term="Redfish.OwningEntity" String="YourVendor"/>
+        <Annotation Term="Redfish.Description"
+                    String="OEM health summary for the managed system."/>
+      </EntityType>
+
+    </Schema>
+
+    <!-- Versioned namespace with concrete properties -->
+    <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm"
+            Namespace="OemYourVendorHealth.v1_0_0">
+
+      <EntityType Name="HealthSummary"
+                  BaseType="OemYourVendorHealth.HealthSummary">
+
+        <!-- TODO: Add properties that match your route handler output.
+             Each Property here should correspond to a key in
+             asyncResp->res.jsonValue from your C++ handler. -->
+
+        <Property Name="OverallHealth" Type="Edm.String" Nullable="false">
+          <Annotation Term="Redfish.Description"
+                      String="Aggregate health status of the system."/>
+          <Annotation Term="Redfish.Enumeration">
+            <Collection>
+              <String>OK</String>
+              <String>Warning</String>
+              <String>Critical</String>
+            </Collection>
+          </Annotation>
+        </Property>
+
+        <Property Name="LastCheckTime" Type="Edm.DateTimeOffset"
+                  Nullable="true">
+          <Annotation Term="Redfish.Description"
+                      String="Timestamp of the last health evaluation."/>
+        </Property>
+
+        <!-- TODO: Add more properties as needed. Examples:
+
+        <Property Name="FanHealth" Type="Edm.String" Nullable="true">
+          <Annotation Term="Redfish.Description"
+                      String="Health status of cooling subsystem."/>
+        </Property>
+
+        <Property Name="PowerHealth" Type="Edm.String" Nullable="true">
+          <Annotation Term="Redfish.Description"
+                      String="Health status of power subsystem."/>
+        </Property>
+
+        <Property Name="ThermalHealth" Type="Edm.String" Nullable="true">
+          <Annotation Term="Redfish.Description"
+                      String="Health status of thermal subsystem."/>
+        </Property>
+
+        -->
+
+        <!-- Status block inherits from Resource.Status -->
+        <Property Name="Status" Type="Resource.Status" Nullable="false">
+          <Annotation Term="Redfish.Description"
+                      String="Resource status following Redfish Status pattern."/>
+        </Property>
+
+      </EntityType>
+
+    </Schema>
+
+  </edmx:DataServices>
+</edmx:Edmx>

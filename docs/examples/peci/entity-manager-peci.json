@@ -1,0 +1,124 @@
+{
+    "_comment": [
+        "Entity Manager configuration for PECI CPU temperature sensor discovery.",
+        "",
+        "This config tells dbus-sensors (specifically the peci-cputemp and",
+        "peci-dimmtemp sensor daemons) to scan the PECI bus for Intel CPUs",
+        "and expose their temperature readings as D-Bus sensor objects.",
+        "",
+        "Install to: /usr/share/entity-manager/configurations/",
+        "",
+        "Key fields:",
+        "  Type    - Sensor driver type. 'intel_peci_client' maps to the",
+        "            peci-cputemp/peci-dimmtemp drivers in dbus-sensors.",
+        "  Bus     - PECI bus number (typically 0 on AST2600).",
+        "  Address - PECI client address (0x30=CPU0, 0x31=CPU1, etc.).",
+        "",
+        "After placing this file, restart entity-manager:",
+        "  systemctl restart xyz.openbmc_project.EntityManager"
+    ],
+
+    "Name": "PECI CPU Sensors",
+    "Type": "Board",
+    "Probe": "TRUE",
+
+    "Exposes": [
+        {
+            "_comment": "CPU 0 package/die temperature via PECI",
+            "Name": "CPU0 Temp",
+            "Type": "intel_peci_client",
+            "Bus": 0,
+            "Address": "0x30",
+            "CpuID": 0,
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 98
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 90
+                }
+            ]
+        },
+        {
+            "_comment": "CPU 1 package/die temperature via PECI",
+            "Name": "CPU1 Temp",
+            "Type": "intel_peci_client",
+            "Bus": 0,
+            "Address": "0x31",
+            "CpuID": 1,
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 98
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 90
+                }
+            ]
+        },
+        {
+            "_comment": [
+                "DIMM temperatures read via PECI from CPU 0.",
+                "The peci-dimmtemp driver queries DIMM thermal data through",
+                "the CPU's integrated memory controller over the PECI bus.",
+                "Individual DIMM sensors are auto-discovered by the driver."
+            ],
+            "Name": "CPU0 DIMM Temps",
+            "Type": "intel_peci_dimmtemp",
+            "Bus": 0,
+            "Address": "0x30",
+            "CpuID": 0,
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 85
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 80
+                }
+            ]
+        },
+        {
+            "_comment": "DIMM temperatures read via PECI from CPU 1.",
+            "Name": "CPU1 DIMM Temps",
+            "Type": "intel_peci_dimmtemp",
+            "Bus": 0,
+            "Address": "0x31",
+            "CpuID": 1,
+            "PowerState": "On",
+            "Thresholds": [
+                {
+                    "Direction": "greater than",
+                    "Name": "upper critical",
+                    "Severity": 1,
+                    "Value": 85
+                },
+                {
+                    "Direction": "greater than",
+                    "Name": "upper warning",
+                    "Severity": 0,
+                    "Value": 80
+                }
+            ]
+        }
+    ]
+}

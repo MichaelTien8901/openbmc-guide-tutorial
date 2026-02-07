@@ -1,0 +1,36 @@
+{
+    "_comment": "phosphor-multi-gpio-monitor configuration file.",
+    "_comment_install": "Install to /etc/phosphor-multi-gpio-monitor.json on the BMC.",
+    "_comment_format": "Each entry in 'gpio_configs' defines a GPIO line to monitor. Fields: 'name' = device tree GPIO line name, 'direction' = edge trigger (FALLING, RISING, or BOTH), 'target' = systemd unit to activate on event, 'continue' = keep monitoring after first event (true for presence pins).",
+
+    "gpio_configs": [
+        {
+            "_comment": "Power button -- active low, trigger on press (falling edge). Activates the systemd target that handles a short power button press (toggle chassis power state).",
+            "name": "POWER_BUTTON",
+            "direction": "FALLING",
+            "target": "obmc-chassis-buttons-power-press.target",
+            "continue": true
+        },
+        {
+            "_comment": "Reset button -- active low, trigger on press (falling edge). Activates the systemd target for a warm reset of the host.",
+            "name": "RESET_BUTTON",
+            "direction": "FALLING",
+            "target": "obmc-chassis-buttons-reset-press.target",
+            "continue": true
+        },
+        {
+            "_comment": "Chassis intrusion switch -- monitor both open and close. The RISING edge (switch open = intrusion detected) starts the handler target; the FALLING edge (switch closed = chassis sealed) stops it.",
+            "name": "CHASSIS_INTRUSION",
+            "direction": "BOTH",
+            "target": "chassis-intrusion-handler.target",
+            "continue": true
+        },
+        {
+            "_comment": "NIC 0 presence detect -- active low (asserted when NIC is inserted). Monitor both edges so inventory is updated on both hot-plug insert and removal. 'continue' is true for ongoing runtime presence tracking.",
+            "name": "NIC0_PRSNT_N",
+            "direction": "BOTH",
+            "target": "nic0-presence-handler.target",
+            "continue": true
+        }
+    ]
+}

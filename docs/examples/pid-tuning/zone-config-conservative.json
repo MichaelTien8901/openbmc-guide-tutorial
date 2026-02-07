@@ -1,0 +1,208 @@
+{
+    "version": "1.0",
+    "comment": "Conservative PID tuning -- low Kp, moderate Ki, no Kd. Prioritizes stability and gradual fan speed changes. Suitable for general-purpose servers where acoustic comfort is secondary to thermal safety.",
+    "sensors": [
+        {
+            "name": "CPU_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/CPU_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "Inlet_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/Inlet_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "DIMM_Temp",
+            "type": "temp",
+            "readPath": "/xyz/openbmc_project/sensors/temperature/DIMM_Temp",
+            "writePath": "",
+            "timeout": 3,
+            "ignoreDbusMinMax": true
+        },
+        {
+            "name": "Fan0",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan0",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm1",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "Fan1",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan1",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm2",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "Fan2",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan2",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm3",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        },
+        {
+            "name": "Fan3",
+            "type": "fan",
+            "readPath": "/xyz/openbmc_project/sensors/fan_tach/Fan3",
+            "writePath": "/sys/class/hwmon/hwmon0/pwm4",
+            "timeout": 3,
+            "ignoreDbusMinMax": false
+        }
+    ],
+    "zones": [
+        {
+            "id": 0,
+            "minThermalOutput": 20.0,
+            "failsafePercent": 100.0,
+            "comment": "Single zone -- minimum 20% PWM floor, 100% on sensor failure"
+        }
+    ],
+    "pid": [
+        {
+            "name": "CPU_Temp_Controller",
+            "type": "temp",
+            "inputs": ["CPU_Temp"],
+            "setpoint": 80.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": -0.05,
+                "integralCoeff": -0.15,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 0.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 20.0,
+                "outLim_max": 100.0,
+                "slewNeg": 3.0,
+                "slewPos": 5.0
+            },
+            "comment": "Low Kp (-0.05) for gentle proportional response. Moderate Ki (-0.15) to slowly eliminate steady-state error. No Kd. Slew limits prevent abrupt changes."
+        },
+        {
+            "name": "Inlet_Temp_Controller",
+            "type": "temp",
+            "inputs": ["Inlet_Temp"],
+            "setpoint": 35.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": -0.03,
+                "integralCoeff": -0.1,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 0.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 20.0,
+                "outLim_max": 100.0,
+                "slewNeg": 2.0,
+                "slewPos": 3.0
+            },
+            "comment": "Even gentler for inlet -- ambient changes are slow, so response can be gradual."
+        },
+        {
+            "name": "DIMM_Temp_Controller",
+            "type": "temp",
+            "inputs": ["DIMM_Temp"],
+            "setpoint": 75.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": -0.04,
+                "integralCoeff": -0.12,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 0.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 20.0,
+                "outLim_max": 100.0,
+                "slewNeg": 2.0,
+                "slewPos": 4.0
+            },
+            "comment": "DIMM thermal mass is high; conservative response avoids overshoot."
+        },
+        {
+            "name": "Fan0_Speed",
+            "type": "fan",
+            "inputs": ["Fan0"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "Fan1_Speed",
+            "type": "fan",
+            "inputs": ["Fan1"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "Fan2_Speed",
+            "type": "fan",
+            "inputs": ["Fan2"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        },
+        {
+            "name": "Fan3_Speed",
+            "type": "fan",
+            "inputs": ["Fan3"],
+            "setpoint": 7000.0,
+            "pid": {
+                "samplePeriod": 1.0,
+                "proportionalCoeff": 0.0,
+                "integralCoeff": 0.0,
+                "feedFwdOffsetCoeff": 0.0,
+                "feedFwdGainCoeff": 1.0,
+                "integralLimit_min": 0.0,
+                "integralLimit_max": 100.0,
+                "outLim_min": 0.0,
+                "outLim_max": 100.0,
+                "slewNeg": 0.0,
+                "slewPos": 0.0
+            }
+        }
+    ]
+}

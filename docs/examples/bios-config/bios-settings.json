@@ -1,0 +1,78 @@
+{
+    "@odata.type": "#Bios.v1_2_0.Bios",
+    "@odata.id": "/redfish/v1/Systems/system/Bios",
+    "Id": "Bios",
+    "Name": "BIOS Configuration",
+    "Description": "Sample BIOS settings showing enumeration, string, and integer attribute types",
+    "AttributeRegistry": "BiosAttributeRegistry.v1_0_0",
+    "Attributes": {
+        "BootMode": "UEFI",
+        "BootOrder": "HDD,PXE,USB,CD",
+        "SecureBoot": "Enabled",
+        "QuietBoot": "Enabled",
+        "HyperThreading": "Enabled",
+        "TurboMode": "Enabled",
+        "SpeedStep": "Enabled",
+        "VirtualizationTechnology": "Enabled",
+        "VTDirectIO": "Enabled",
+        "PowerProfile": "MaxPerformance",
+        "SriovGlobalEnable": "Enabled",
+        "AssetTag": "SVR-RACK42-U16",
+        "AdminPassword": "",
+        "WakeOnLan": "Enabled",
+        "SerialPortAddress": "0x3F8",
+        "NumCoresPerSocket": 16,
+        "MemorySpeed": 3200,
+        "FanDutyMinimum": 30,
+        "PcieLinkSpeed": 4,
+        "WatchdogTimeout": 300
+    },
+    "Links": {
+        "ActiveSoftwareImage": {
+            "@odata.id": "/redfish/v1/UpdateService/FirmwareInventory/bios_active"
+        }
+    },
+    "@Redfish.Settings": {
+        "@odata.type": "#Settings.v1_3_5.Settings",
+        "SettingsObject": {
+            "@odata.id": "/redfish/v1/Systems/system/Bios/Settings"
+        },
+        "Time": "2025-01-15T10:30:00+00:00",
+        "ETag": "\"1234567890\"",
+        "Messages": [
+            {
+                "MessageId": "Base.1.19.0.Success",
+                "Message": "The request completed successfully.",
+                "Severity": "OK"
+            }
+        ]
+    },
+    "_comment_attribute_types": {
+        "enumeration_attributes": [
+            "BootMode          -- Allowed: UEFI, Legacy",
+            "SecureBoot        -- Allowed: Enabled, Disabled",
+            "QuietBoot         -- Allowed: Enabled, Disabled",
+            "HyperThreading    -- Allowed: Enabled, Disabled",
+            "TurboMode         -- Allowed: Enabled, Disabled",
+            "SpeedStep         -- Allowed: Enabled, Disabled",
+            "VirtualizationTechnology -- Allowed: Enabled, Disabled",
+            "VTDirectIO        -- Allowed: Enabled, Disabled",
+            "PowerProfile      -- Allowed: MaxPerformance, EnergyEfficient, Custom",
+            "SriovGlobalEnable -- Allowed: Enabled, Disabled",
+            "WakeOnLan         -- Allowed: Enabled, Disabled",
+            "SerialPortAddress -- Allowed: 0x3F8, 0x2F8, 0x3E8, 0x2E8"
+        ],
+        "string_attributes": [
+            "BootOrder         -- MinLength: 0, MaxLength: 64",
+            "AssetTag          -- MinLength: 0, MaxLength: 32",
+            "AdminPassword     -- MinLength: 0, MaxLength: 20"
+        ],
+        "integer_attributes": [
+            "NumCoresPerSocket -- LowerBound: 1, UpperBound: 128, ScalarIncrement: 1",
+            "MemorySpeed       -- LowerBound: 800, UpperBound: 6400, ScalarIncrement: 400",
+            "FanDutyMinimum    -- LowerBound: 0, UpperBound: 100, ScalarIncrement: 5",
+            "PcieLinkSpeed     -- LowerBound: 1, UpperBound: 5, ScalarIncrement: 1",
+            "WatchdogTimeout   -- LowerBound: 0, UpperBound: 3600, ScalarIncrement: 1"
+        ]
+    }
+}

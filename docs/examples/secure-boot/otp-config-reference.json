@@ -1,0 +1,176 @@
+{
+    "_comment": [
+        "==========================================================================",
+        "ASPEED AST2600 OTP Configuration Reference",
+        "==========================================================================",
+        "",
+        "WARNING: OTP (One-Time Programmable) memory is IRREVERSIBLE.",
+        "Once a bit is programmed to 1, it can NEVER be changed back to 0.",
+        "Incorrect OTP programming WILL PERMANENTLY BRICK the device.",
+        "",
+        "This file is a REFERENCE EXAMPLE showing the structure of an OTP",
+        "configuration for ASPEED AST2600 secure boot. It is NOT a ready-to-use",
+        "configuration file. The actual format depends on your socsec version",
+        "and ASPEED toolchain.",
+        "",
+        "Always consult ASPEED's OTP programming documentation for your specific",
+        "SoC revision (A0, A1, A2, A3) before programming OTP.",
+        "=========================================================================="
+    ],
+
+    "otp_version": "A3",
+    "_otp_version_comment": "AST2600 silicon revision. OTP layout differs between revisions. Verify your chip revision before using this configuration.",
+
+    "key_region": {
+        "_comment": [
+            "The key region stores public key hashes used by the boot ROM to",
+            "verify signed firmware images. Up to 8 key slots are available.",
+            "Each slot holds a SHA-256 hash of an RSA public key (32 bytes).",
+            "",
+            "Key slot 0 is typically the primary secure boot signing key.",
+            "Additional slots can be used for key rotation / revocation.",
+            "Once a key slot is programmed, it cannot be erased or overwritten."
+        ],
+        "keys": [
+            {
+                "slot": 0,
+                "type": "RSA4096_SHA256",
+                "usage": "secure_boot_signing",
+                "hash": "REPLACE_WITH_ACTUAL_PUBLIC_KEY_SHA256_HASH",
+                "_hash_comment": "Run: openssl rsa -in private.pem -pubout -outform DER | openssl dgst -sha256 -hex"
+            },
+            {
+                "slot": 1,
+                "type": "RSA4096_SHA256",
+                "usage": "secure_boot_signing_backup",
+                "hash": "",
+                "_hash_comment": "Optional backup key slot. Program only if you have a key rotation strategy."
+            }
+        ],
+        "_keys_remaining_comment": "Slots 2-7 are available for future use. Leave unprogrammed until needed."
+    },
+
+    "security_straps": {
+        "_comment": [
+            "Security strap bits control boot-time security policy.",
+            "These are OTP-backed and IRREVERSIBLE once programmed.",
+            "",
+            "CRITICAL: Enable secure boot enforcement ONLY after you have:",
+            "  1. Successfully programmed the correct key hash into key_region",
+            "  2. Verified a signed image boots correctly on this specific board",
+            "  3. Confirmed the key hash matches your signing key",
+            "",
+            "If you enable secure boot enforcement without a valid key + signed",
+            "image, the device will NOT boot and CANNOT be recovered."
+        ],
+
+        "secure_boot_enable": {
+            "value": false,
+            "_comment": [
+                "Master enable for secure boot. When true, the boot ROM will",
+                "verify the digital signature on U-Boot SPL before executing it.",
+                "Set to true ONLY after confirming signed boot works correctly.",
+                "THIS IS IRREVERSIBLE."
+            ]
+        },
+
+        "secure_boot_mode": {
+            "value": 2,
+            "_comment": [
+                "Boot verification mode:",
+                "  Mode 1 (GCM): AES-GCM encryption + authentication",
+                "  Mode 2 (RSA): RSA signature verification (most common)",
+                "  Mode 3 (GCM+RSA): Both encryption and signature",
+                "",
+                "Mode 2 (RSA) is the typical choice for OpenBMC secure boot.",
+                "It verifies the image signature without requiring encryption."
+            ]
+        },
+
+        "ignore_secure_boot_hw_strap": {
+            "value": false,
+            "_comment": "When false, hardware strap pins can override OTP secure boot setting. Set to true to enforce OTP-only control."
+        },
+
+        "disable_jtag": {
+            "value": false,
+            "_comment": [
+                "Disable JTAG debug port. For production security hardening.",
+                "WARNING: Disabling JTAG removes the last hardware debug path.",
+                "Keep enabled during development. Only disable for production",
+                "after thorough validation."
+            ]
+        },
+
+        "disable_uart_boot": {
+            "value": false,
+            "_comment": "Disable UART boot mode. Prevents loading unsigned code via UART. Enable for production hardening after validation."
+        },
+
+        "write_protect_key_region": {
+            "value": false,
+            "_comment": [
+                "Write-protect the key region to prevent further key slot programming.",
+                "Enable only after ALL needed key slots are programmed.",
+                "Once enabled, no additional keys can be added."
+            ]
+        }
+    },
+
+    "data_region": {
+        "_comment": [
+            "The OTP data region stores platform-specific configuration.",
+            "These fields are informational and vary by platform."
+        ],
+
+        "mac_address": {
+            "value": "",
+            "_comment": "Optional: BMC MAC address stored in OTP. Format: XX:XX:XX:XX:XX:XX"
+        },
+
+        "vendor_id": {
+            "value": "",
+            "_comment": "Optional: Vendor-specific identification string."
+        }
+    },
+
+    "programming_checklist": {
+        "_comment": [
+            "==========================================================================",
+            "OTP PROGRAMMING CHECKLIST -- Complete ALL items before programming",
+            "==========================================================================",
+            "",
+            "[ ] Verified silicon revision matches otp_version field",
+            "[ ] Generated signing key pair (RSA-4096)",
+            "[ ] Computed SHA-256 hash of public key",
+            "[ ] Double-checked key hash value (compare multiple independent computations)",
+            "[ ] Successfully signed a test U-Boot SPL image",
+            "[ ] Flashed signed image to development board",
+            "[ ] Verified signed image boots correctly",
+            "[ ] Tested with WRONG key to confirm rejection works",
+            "[ ] Backed up signing private key in secure storage (HSM)",
+            "[ ] Documented key hash and associated key identifier",
+            "[ ] Obtained sign-off from security team",
+            "[ ] Obtained sign-off from firmware team",
+            "",
+            "Only after ALL items are checked, proceed with OTP programming.",
+            "=========================================================================="
+        ]
+    },
+
+    "socsec_command_reference": {
+        "_comment": [
+            "Reference commands for OTP programming with socsec.",
+            "DO NOT run these commands without completing the checklist above.",
+            "",
+            "Read current OTP state (safe, read-only):",
+            "  socsec otp read --soc AST2600",
+            "",
+            "Program OTP from config (IRREVERSIBLE):",
+            "  socsec otp program --soc AST2600 --otp_config otp-config.json",
+            "",
+            "Verify OTP contents after programming:",
+            "  socsec otp verify --soc AST2600 --otp_config otp-config.json"
+        ]
+    }
+}

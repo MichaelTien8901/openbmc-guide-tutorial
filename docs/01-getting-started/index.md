@@ -80,6 +80,8 @@ These topics are relevant only for hardware engineers doing board bring-up — n
 | [First Build]({% link docs/01-getting-started/03-first-build.md %}) | Build and run OpenBMC in QEMU | 45 min |
 | [Development Workflow]({% link docs/01-getting-started/04-development-workflow.md %}) | Iterate quickly with devtool and bbappend | 30 min |
 | [Building QEMU]({% link docs/01-getting-started/05-qemu-build.md %}) | Build QEMU from source if needed | 20 min |
+| [Devtool Workflow]({% link docs/01-getting-started/06-devtool-workflow-guide.md %}) | Advanced devtool usage for recipe development | 30 min |
+| [Gerrit Contribution]({% link docs/01-getting-started/07-gerrit-contribution-guide.md %}) | Submit patches to OpenBMC via Gerrit | 30 min |
 
 ## Quick Path
 
