@@ -39,27 +39,24 @@ OpenBMC operates in two DICE-related roles:
 | **Verifier** | The BMC attests DICE-enabled platform components (GPUs, NICs, SSDs) via SPDM, where those devices use DICE to generate their SPDM keys |
 | **Attester** | The BMC itself can use DICE for its own firmware identity, allowing the host or a remote verifier to attest the BMC |
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  Remote Attestation Server                  │
-│              (Verifies BMC + device identities)             │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ Redfish ComponentIntegrity
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     OpenBMC (BMC)                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │ DICE identity│  │ SPDM daemon  │  │ Redfish      │       │
-│  │ (own FW)     │  │ (attestor)   │  │ (exposure)   │       │
-│  └──────────────┘  └──────┬───────┘  └──────────────┘       │
-└───────────────────────────┼─────────────────────────────────┘
-                            │ SPDM over MCTP/DOE
-           ┌────────────────┼─────────────────┐
-           ▼                ▼                 ▼
-    ┌──────────┐      ┌──────────┐       ┌──────────┐
-    │   GPU    │      │   NIC    │       │   SSD    │
-    │  (DICE)  │      │  (DICE)  │       │  (DICE)  │
-    └──────────┘      └──────────┘       └──────────┘
+```mermaid
+graph TB
+    RAS["Remote Attestation Server<br/>(Verifies BMC + device identities)"]
+    subgraph BMC["OpenBMC (BMC)"]
+       direction TB
+       DICE_ID["DICE Identity<br/>(own FW)"]
+       SPDMD["SPDM Daemon<br/>(attestor)"]
+       RF["Redfish<br/>(exposure)"]
+    end
+    subgraph devices[" "]
+       direction TB
+       GPU["GPU<br/>(DICE)"]
+       NIC["NIC<br/>(DICE)"]
+       SSD["SSD<br/>(DICE)"]
+    end
+
+    RAS -->|"Redfish ComponentIntegrity"| BMC
+    SPDMD -->|"SPDM over MCTP/DOE"| devices
 ```
 
 ### DICE vs. TPM
@@ -92,82 +89,31 @@ DICE relies on three foundational elements:
 
 The fundamental operation: each boot layer **measures the next** and derives a unique secret for it. If any firmware changes, all downstream secrets change.
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Hardware (Immutable ROM)                                    │
-│                                                              │
-│  UDS (Unique Device Secret)                                  │
-│  ├── Fused at manufacturing                                  │
-│  ├── Unique per device                                       │
-│  └── Never readable by software after DICE engine runs       │
-│                                                              │
-│  DICE Engine:                                                │
-│    CDI = KDF(UDS, Hash(Layer 0 firmware image))              │
-│    *** Wipe UDS from accessible memory ***                   │
-│                                                              │
-└──────────────────────┬───────────────────────────────────────┘
-                       │ CDI
-                       ▼
-┌──────────────────────────────────────────────────────────────┐
-│  Layer 0 (First Mutable Firmware)                            │
-│                                                              │
-│  DeviceID Key Pair = KDF(CDI, "identity")                    │
-│  ├── Represents: this device + this ROM                      │
-│  └── Stable across L0 firmware updates                       │
-│                                                              │
-│  Alias Key Pair = KDF(CDI, Hash(Layer 1 firmware image))     │
-│  ├── Represents: this device + this ROM + this L0 + this L1  │
-│  └── Changes if Layer 1 firmware is updated                  │
-│                                                              │
-│  Issue Alias Certificate (signed by DeviceID private key):   │
-│    Subject: Alias public key                                 │
-│    Issuer:  DeviceID                                         │
-│    Extension: TCI of Layer 1 (firmware measurement)          │
-│                                                              │
-│  *** Wipe CDI from accessible memory ***                     │
-│                                                              │
-└──────────────────────┬───────────────────────────────────────┘
-                       │ Alias Key + Certificate Chain
-                       ▼
-┌──────────────────────────────────────────────────────────────┐
-│  Layer 1 (Main Firmware / RTOS / Linux)                      │
-│                                                              │
-│  Uses Alias key for:                                         │
-│  ├── SPDM challenge responses                                │
-│  ├── TLS client authentication                               │
-│  ├── Firmware attestation signing                            │
-│  └── Secure session establishment                            │
-│                                                              │
-│  If more layers exist, repeat:                               │
-│    Next CDI = KDF(current CDI, Hash(next layer))             │
-│    Issue next certificate signed by current key              │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+
+    HW["<b>Hardware (Immutable ROM)</b><br/><br/>UDS (Unique Device Secret)<br/>• Fused at manufacturing<br/>• Unique per device<br/>• Never readable by software after DICE engine runs<br/><br/>DICE Engine:<br/>CDI = KDF(UDS, Hash(Layer 0 firmware image))<br/>⚠ Wipe UDS from accessible memory"]
+    L0["<b>Layer 0 (First Mutable Firmware)</b><br/><br/>DeviceID Key Pair = KDF(CDI, 'identity')<br/>• Represents: this device + this ROM<br/>• Stable across L0 firmware updates<br/><br/>Alias Key Pair = KDF(CDI, Hash(Layer 1 firmware image))<br/>• Represents: this device + this ROM + this L0 + this L1<br/>• Changes if Layer 1 firmware is updated<br/><br/>Issue Alias Certificate (signed by DeviceID private key):<br/>Subject: Alias public key | Issuer: DeviceID<br/>Extension: TCI of Layer 1 (firmware measurement)<br/>⚠ Wipe CDI from accessible memory"]
+    L1["<b>Layer 1 (Main Firmware / RTOS / Linux)</b><br/><br/>Uses Alias key for:<br/>• SPDM challenge responses<br/>• TLS client authentication<br/>• Firmware attestation signing<br/>• Secure session establishment<br/><br/>If more layers exist, repeat:<br/>Next CDI = KDF(current CDI, Hash(next layer))<br/>Issue next certificate signed by current key"]
+
+    HW -->|"CDI"| L0
+    L0 -->|"Alias Key + Certificate Chain"| L1
 ```
 
 ### The Certificate Chain
 
 Each DICE layer produces a certificate that chains to the previous layer:
 
-```
-Manufacturer Root CA              (Pre-provisioned, off-device)
-        │
-        ▼
-DeviceID Certificate              (Signed by manufacturer during provisioning)
-  Subject: DeviceID public key
-  Issuer: Manufacturer CA
-        │
-        ▼
-Alias Certificate (Layer 0→1)     (Generated at boot by Layer 0)
-  Subject: Alias public key
-  Issuer: DeviceID
-  Extension: TCI of Layer 1
-        │
-        ▼
-Alias Certificate (Layer 1→2)     (Generated at boot by Layer 1, if applicable)
-  Subject: L2 Alias public key
-  Issuer: L1 Alias
-  Extension: TCI of Layer 2
+```mermaid
+graph TD
+    ROOT["<b>Manufacturer Root CA</b><br/>(Pre-provisioned, off-device)"]
+    DEVID["<b>DeviceID Certificate</b><br/>(Signed by manufacturer during provisioning)<br/>Subject: DeviceID public key<br/>Issuer: Manufacturer CA"]
+    ALIAS1["<b>Alias Certificate (Layer 0→1)</b><br/>(Generated at boot by Layer 0)<br/>Subject: Alias public key<br/>Issuer: DeviceID<br/>Extension: TCI of Layer 1"]
+    ALIAS2["<b>Alias Certificate (Layer 1→2)</b><br/>(Generated at boot by Layer 1, if applicable)<br/>Subject: L2 Alias public key<br/>Issuer: L1 Alias<br/>Extension: TCI of Layer 2"]
+
+    ROOT --> DEVID
+    DEVID --> ALIAS1
+    ALIAS1 --> ALIAS2
 ```
 
 A verifier (the BMC via SPDM, or a remote server via Redfish) validates the entire chain:
@@ -199,48 +145,36 @@ DICE provides the **key material and certificates**; SPDM provides the **protoco
 
 ### Authentication Flow
 
-```
-BMC (SPDM Requester)                    Device (SPDM Responder + DICE)
-──────────────────                       ─────────────────────────────
+```mermaid
+sequenceDiagram
+    participant BMC as BMC (SPDM Requester)
+    participant Device as Device (SPDM Responder + DICE)
 
-                                         [At boot: DICE derives Alias key
-                                          and builds certificate chain]
+    Note over Device: At boot: DICE derives Alias key<br/>and builds certificate chain
 
-GET_VERSION ────────────────────────→
-              ←──────────────────────    VERSION (1.1)
+    BMC->>Device: GET_VERSION
+    Device-->>BMC: VERSION (1.1)
 
-GET_CAPABILITIES ───────────────────→
-              ←──────────────────────    CAPABILITIES
+    BMC->>Device: GET_CAPABILITIES
+    Device-->>BMC: CAPABILITIES
 
-NEGOTIATE_ALGORITHMS ───────────────→
-              ←──────────────────────    ALGORITHMS
+    BMC->>Device: NEGOTIATE_ALGORITHMS
+    Device-->>BMC: ALGORITHMS
 
-GET_CERTIFICATE (slot 0) ──────────→
-              ←──────────────────────    CERTIFICATE chain:
-                                           Root CA cert
-                                           DeviceID cert
-                                           Alias cert (with TCI)
+    BMC->>Device: GET_CERTIFICATE (slot 0)
+    Device-->>BMC: CERTIFICATE chain:<br/>Root CA cert → DeviceID cert → Alias cert (with TCI)
 
-    [BMC validates certificate chain
-     against trusted Root CA]
-    [BMC extracts TCI from Alias cert
-     and compares to known-good values]
+    Note over BMC: Validates certificate chain against trusted Root CA<br/>Extracts TCI from Alias cert and compares to known-good values
 
-CHALLENGE (nonce) ─────────────────→
-              ←──────────────────────    CHALLENGE_AUTH:
-                                           Signed with Alias private key
-                                           (DICE-derived)
+    BMC->>Device: CHALLENGE (nonce)
+    Device-->>BMC: CHALLENGE_AUTH:<br/>Signed with Alias private key (DICE-derived)
 
-    [BMC verifies signature matches
-     Alias public key from cert chain]
+    Note over BMC: Verifies signature matches<br/>Alias public key from cert chain
 
-GET_MEASUREMENTS ──────────────────→
-              ←──────────────────────    MEASUREMENTS:
-                                           firmware hashes (signed)
-                                           configuration state
+    BMC->>Device: GET_MEASUREMENTS
+    Device-->>BMC: MEASUREMENTS:<br/>firmware hashes (signed), configuration state
 
-    [BMC compares measurements to
-     expected values from policy]
+    Note over BMC: Compares measurements to<br/>expected values from policy
 ```
 
 ### What the BMC Learns
@@ -312,35 +246,18 @@ The BMC itself can use DICE to establish its own firmware identity. This enables
 
 On an AST2600-based OpenBMC system:
 
-```
-AST2600 SoC ROM (Immutable)
-  │
-  │  UDS (in OTP fuses)
-  │  DICE: CDI = KDF(UDS, Hash(SPL))
-  │
-  ▼
-SPL (Secondary Program Loader)
-  │
-  │  DeviceID = KDF(CDI)
-  │  Alias = KDF(CDI, Hash(U-Boot))
-  │  Issue Alias cert
-  │
-  ▼
-U-Boot
-  │
-  │  Next CDI = KDF(CDI, Hash(Linux kernel + FIT image))
-  │  Issue next cert
-  │
-  ▼
-Linux Kernel + OpenBMC Rootfs
-  │
-  │  Application-level Alias key available for:
-  │  ├── SPDM responder (host attests the BMC)
-  │  ├── TLS authentication to management server
-  │  └── Redfish service identity
-  │
-  ▼
-Host can verify BMC via SPDM over MCTP/USB/PCIe
+```mermaid
+graph TD
+    ROM["<b>AST2600 SoC ROM (Immutable)</b><br/><br/>UDS (in OTP fuses)<br/>DICE: CDI = KDF(UDS, Hash(SPL))"]
+    SPL["<b>SPL (Secondary Program Loader)</b><br/><br/>DeviceID = KDF(CDI)<br/>Alias = KDF(CDI, Hash(U-Boot))<br/>Issue Alias cert"]
+    UBOOT["<b>U-Boot</b><br/><br/>Next CDI = KDF(CDI, Hash(Linux kernel + FIT image))<br/>Issue next cert"]
+    LINUX["<b>Linux Kernel + OpenBMC Rootfs</b><br/><br/>Application-level Alias key available for:<br/>• SPDM responder (host attests the BMC)<br/>• TLS authentication to management server<br/>• Redfish service identity"]
+    HOST["Host can verify BMC via SPDM over MCTP/USB/PCIe"]
+
+    ROM --> SPL
+    SPL --> UBOOT
+    UBOOT --> LINUX
+    LINUX --> HOST
 ```
 
 ### Relationship to AST2600 Secure Boot
@@ -365,27 +282,15 @@ Best practice: **use both together**. Secure boot prevents unauthorized code fro
 
 DICE requires one-time provisioning at the factory:
 
-```
-Manufacturing Station                  Device
-────────────────────                   ──────
-1. Generate unique UDS
-   (random, 256+ bits)
-                         ──────→      Fuse UDS into OTP
-                                      (irreversible, never readable)
+```mermaid
+sequenceDiagram
+    participant MFG as Manufacturing Station
+    participant DEV as Device
 
-2. Boot device, extract
-   DeviceID public key
-                         ←──────      Device outputs DeviceID pub key
-
-3. Sign DeviceID cert
-   with Manufacturer CA
-   private key
-                         ──────→      Store DeviceID cert in device
-                                      (or retrieve at attestation time)
-
-4. Register DeviceID in
-   manufacturer database
-   (for revocation)
+    MFG->>DEV: 1. Generate unique UDS (random, 256+ bits)<br/>Fuse UDS into OTP (irreversible, never readable)
+    DEV-->>MFG: 2. Boot device, output DeviceID public key
+    MFG->>DEV: 3. Sign DeviceID cert with Manufacturer CA private key<br/>Store DeviceID cert in device
+    Note over MFG: 4. Register DeviceID in<br/>manufacturer database (for revocation)
 ```
 
 ### Certificate Authority Setup
@@ -523,42 +428,34 @@ Each layer has its own CDI and certificate. Android uses this for hardware-backe
 
 ## Relationship to Other OpenBMC Security Features
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                   OpenBMC Security Stack                       │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│  Remote Attestation                                            │
-│  ┌───────────────────┐  ┌──────────────────┐                   │
-│  │ Redfish           │  │ DMTF SPDM        │                   │
-│  │ ComponentIntegrity│  │ (protocol)       │                   │
-│  └────────┬──────────┘  └────────┬─────────┘                   │
-│           │                      │                             │
-│  Device Identity                 │                             │
-│  ┌────────┴──────────────────────┴─────────┐                   │
-│  │            DICE                         │                   │
-│  │  (hardware root of trust for devices)   │                   │
-│  └─────────────────────────────────────────┘                   │
-│                                                                │
-│  BMC Firmware Trust                                            │
-│  ┌─────────────────┐  ┌──────────────────┐                     │
-│  │ Secure Boot     │  │ DICE (BMC own    │                     │
-│  │ (prevent bad FW)│  │  identity)       │                     │
-│  └─────────────────┘  └──────────────────┘                     │
-│                                                                │
-│  Communication Security                                        │
-│  ┌─────────────────┐  ┌──────────────────┐                     │
-│  │ TLS Certificates│  │ SSH Keys         │                     │
-│  │ (Redfish/HTTPS) │  │ (management)     │                     │
-│  └─────────────────┘  └──────────────────┘                     │
-│                                                                │
-│  Access Control                                                │
-│  ┌─────────────────┐  ┌──────────────────┐                     │
-│  │ User Manager    │  │ LDAP/AD          │                     │
-│  │ (local auth)    │  │ (enterprise auth)│                     │
-│  └─────────────────┘  └──────────────────┘                     │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph "OpenBMC Security Stack"
+        direction TB
+        subgraph "Remote Attestation"
+            direction TB
+            RF["Redfish<br/>ComponentIntegrity"]
+            SPDM["DMTF SPDM<br/>(protocol)"]
+        end
+        subgraph "Device Identity"
+            DICE["DICE<br/>(hardware root of trust for devices)"]
+        end
+        subgraph "BMC Firmware Trust"
+            SB["Secure Boot<br/>(prevent bad FW)"]
+            DICE_BMC["DICE<br/>(BMC own identity)"]
+        end
+        subgraph "Communication Security"
+            TLS["TLS Certificates<br/>(Redfish/HTTPS)"]
+            SSH["SSH Keys<br/>(management)"]
+        end
+        subgraph "Access Control"
+            UM["User Manager<br/>(local auth)"]
+            LDAP["LDAP/AD<br/>(enterprise auth)"]
+        end
+    end
+
+    RF --> DICE
+    SPDM --> DICE
 ```
 
 | Feature | Guide | Relationship to DICE |
