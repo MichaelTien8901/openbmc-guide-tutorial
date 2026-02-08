@@ -13,7 +13,7 @@ last_modified_date: 2026-02-06
 # Multi-Host Support
 {: .no_toc }
 
-Configure a single BMC to manage multiple host systems using IPMB bridging, per-host state management, and D-Bus/systemd multiplexing.
+Configure a single BMC to manage multiple host systems using IPMB bridging, per-host state management, D-Bus/systemd multiplexing, or satellite Bridge ICs (OpenBIC).
 {: .fs-6 .fw-300 }
 
 ## Table of Contents
@@ -44,7 +44,7 @@ This guide walks you through the complete multi-host architecture: how IPMB brid
 Multi-host support requires careful hardware design. Each host needs a dedicated I2C bus for IPMB communication. Verify your baseboard schematic provides separate I2C controllers or mux channels for each host before implementing the software configuration.
 
 {: .note }
-Multi-host is distinct from multi-node MCTP/PLDM topologies. This guide covers IPMI-based multi-host where each host has a traditional IPMB link to the BMC. For PLDM-based multi-endpoint management, see the [MCTP & PLDM Guide]({% link docs/05-advanced/01-mctp-pldm-guide.md %}).
+Multi-host is distinct from multi-node MCTP/PLDM topologies. This guide covers two approaches: (1) IPMI-based multi-host where each host has a traditional IPMB link to the BMC, and (2) satellite processor (OpenBIC) multi-host where Bridge ICs act as local agents offloading the BMC. For PLDM-based multi-endpoint management, see the [MCTP & PLDM Guide]({% link docs/05-advanced/01-mctp-pldm-guide.md %}).
 
 ---
 
@@ -683,6 +683,185 @@ See working examples in the [examples/multi-host](https://github.com/MichaelTien
 
 ---
 
+## Satellite Processor Approach (OpenBIC)
+
+An alternative to direct IPMB-per-host is using **satellite processors** — small Bridge ICs (BICs) placed on each server board that act as local BMC agents. The open-source [OpenBIC](https://github.com/facebook/OpenBIC) project provides firmware for these Bridge ICs, enabling a single BMC to manage many hosts by delegating per-host monitoring and control to dedicated satellite processors.
+
+### What is a Bridge IC (BIC)?
+
+A Bridge IC is a small microcontroller (typically an ASPEED AST1030) deployed on each server sled or server board. It runs OpenBIC firmware (based on Zephyr RTOS) and provides:
+
+- **Local sensor monitoring** — reads host CPU temperatures, voltages, and power sensors directly, reducing I2C traffic to the BMC
+- **Event logging** — captures and buffers host events locally before forwarding to the BMC
+- **Host power sequencing** — manages local power-on/off sequences for its host
+- **Firmware update agent** — handles local component firmware updates (BIOS, CPLD, etc.)
+- **Protocol bridging** — translates between the host's eSPI/LPC interface and the BMC's management bus
+
+The BIC acts as a local agent of the BMC, sharing the BMC's management burden in complex multi-host architectures.
+
+### BIC vs Direct IPMB Architecture
+
+| Aspect | Direct IPMB (Traditional) | Satellite BIC (OpenBIC) |
+|--------|--------------------------|------------------------|
+| **Host connection** | BMC connects directly to each host via I2C/IPMB | BIC on each sled connects to its host; BMC talks to BICs |
+| **Scalability** | Limited by BMC I2C bus count | Scales to many hosts — each BIC handles its own host |
+| **Sensor polling** | BMC polls all sensors for all hosts | BIC polls local sensors, BMC queries BIC for aggregated data |
+| **Protocol** | IPMB (IPMI over I2C) | MCTP over I3C or SMBus, with PLDM for sensor/FRU data |
+| **Failure isolation** | BMC I2C hang affects all hosts on that bus | BIC failure only affects its local host |
+| **Hardware cost** | Lower (no extra IC) | Higher (one AST1030 per sled) |
+| **Firmware complexity** | Simpler — single firmware image | Two firmware stacks: OpenBMC on BMC + OpenBIC on each BIC |
+| **Example platforms** | Traditional twin-server boards | Meta Yosemite v3/v3.5/v4, OCP multi-node sleds |
+
+### Satellite Processor Topology
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│              Satellite BIC Multi-Host Architecture                   │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│   ┌──────────────────────────────────────────────────────────────┐   │
+│   │                    BMC (AST2600)                             │   │
+│   │                                                              │   │
+│   │  ┌──────────────┐  ┌──────────────┐                          │   │
+│   │  │ pldmd        │  │ bmcweb       │                          │   │
+│   │  │ (PLDM daemon)│  │ (Redfish)    │                          │   │
+│   │  └──────┬───────┘  └──────────────┘                          │   │
+│   │         │                                                    │   │
+│   │  ┌──────┴───────┐                                            │   │
+│   │  │ mctpd        │   MCTP endpoint discovery + routing        │   │
+│   │  └──┬───┬───┬───┘                                            │   │
+│   └─────┼───┼───┼────────────────────────────────────────────────┘   │
+│         │   │   │   I3C / SMBus (MCTP transport)                     │
+│    ┌────┘   │   └────┐                                               │
+│    │        │        │                                               │
+│  ┌─┴──────────┐   ┌──┴─────────┐  ┌────────────┐                     │
+│  │ BIC 0      │   │ BIC 1      │  │ BIC 2      │  ...                │
+│  │ (AST1030)  │   │ (AST1030)  │  │ (AST1030)  │                     │
+│  │ OpenBIC FW │   │ OpenBIC FW │  │ OpenBIC FW │                     │
+│  │            │   │            │  │            │                     │
+│  │ ┌────────┐ │   │ ┌────────┐ │  │ ┌────────┐ │                     │
+│  │ │Sensors │ │   │ │Sensors │ │  │ │Sensors │ │                     │
+│  │ │Power   │ │   │ │Power   │ │  │ │Power   │ │                     │
+│  │ │FW Upd  │ │   │ │FW Upd  │ │  │ │FW Upd  │ │                     │
+│  │ └────────┘ │   │ └────────┘ │  │ └────────┘ │                     │
+│  └─────┬──────┘   └─────┬──────┘  └─────┬──────┘                     │
+│        │  eSPI          │  eSPI         │  eSPI                      │
+│  ┌─────┴──────┐   ┌─────┴──────┐  ┌─────┴──────┐                     │
+│  │  Host 0    │   │  Host 1    │  │  Host 2    │                     │
+│  │ (CPU/BIOS) │   │ (CPU/BIOS) │  │ (CPU/BIOS) │                     │
+│  └────────────┘   └────────────┘  └────────────┘                     │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### Communication Stack
+
+In the BIC architecture, the BMC communicates with each Bridge IC using **MCTP** (Management Component Transport Protocol) over **I3C** or **SMBus**, with **PLDM** (Platform Level Data Model) as the application-layer protocol for sensor data, FRU information, and firmware updates.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              BMC ←→ BIC Communication Stack                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   BMC Side                          BIC Side                    │
+│   ─────────                         ────────                    │
+│   ┌──────────────┐                  ┌──────────────┐            │
+│   │ Redfish /    │                  │ Sensor       │            │
+│   │ D-Bus apps   │                  │ Monitors     │            │
+│   └──────┬───────┘                  └──────┬───────┘            │
+│          │                                 │                    │
+│   ┌──────┴───────┐                  ┌──────┴───────┐            │
+│   │ pldmd        │  PLDM T2 (Sensor)│ PLDM         │            │
+│   │              │◄── & FRU data ──►│ Responder    │            │
+│   └──────┬───────┘                  └──────┬───────┘            │
+│          │                                 │                    │
+│   ┌──────┴───────┐                  ┌──────┴───────┐            │
+│   │ mctpd        │  MCTP messages   │ MCTP         │            │
+│   │              │◄────────────────►│ Service      │            │
+│   └──────┬───────┘                  └──────┬───────┘            │
+│          │                                 │                    │
+│   ┌──────┴───────┐                  ┌──────┴───────┐            │
+│   │ I3C / SMBus  │  Physical bus    │ I3C / SMBus  │            │
+│   │ Controller   │◄────────────────►│ Controller   │            │
+│   └──────────────┘                  └──────────────┘            │
+│                                                                 │
+│   MCTP Endpoint IDs (EIDs):                                     │
+│   ── BMC:   0x08 (default)                                      │
+│   ── BIC 0: 0x0A                                                │
+│   ── BIC 1: 0x0C                                                │
+│   ── BIC 2: 0x0E                                                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### PLDM Sensor Data Flow
+
+Each BIC monitors local sensors and exposes them to the BMC via PLDM Type 2 (Monitoring and Control). The BMC's `pldmd` daemon discovers BIC sensors through Platform Descriptor Records (PDRs) and makes them available on D-Bus for bmcweb/Redfish.
+
+```bash
+# On the BMC — discover PLDM endpoints
+pldmtool platform GetPDR -d 0   # List PDRs from terminus 0 (BIC 0)
+
+# Read a sensor from a BIC via PLDM
+pldmtool platform GetSensorReading -i <sensor_id> -t <terminus_id>
+
+# Sensors from BICs appear on D-Bus like any other sensor
+busctl get-property xyz.openbmc_project.PLDM \
+    /xyz/openbmc_project/sensors/temperature/BIC_0_CPU_Temp \
+    xyz.openbmc_project.Sensor.Value Value
+```
+
+### OpenBIC Hardware: ASPEED AST1030
+
+The [AST1030](https://www.aspeedtech.com/bic/) is ASPEED's purpose-built BIC chip:
+
+| Feature | AST1030 |
+|---------|---------|
+| **CPU** | Arm Cortex-M4F |
+| **Memory** | Internal flash and SRAM |
+| **Host interface** | eSPI |
+| **BMC interface** | I2C, I3C, SMBus |
+| **USB** | USB 1.1 device |
+| **RTOS** | Zephyr (via OpenBIC) |
+| **Package** | 256-pin TFBGA (13mm x 13mm) |
+
+### Reference Platform: Meta Yosemite v3.5
+
+The [Yosemite v3.5](https://www.qemu.org/docs/master/system/arm/fby35.html) is a well-known OCP platform that uses the BIC architecture:
+
+- **Baseboard**: AST2600 BMC running OpenBMC
+- **4 server slots**: Each slot has an AST1030 BIC running OpenBIC
+- **Form factor**: Sled that fits into a 40U chassis (3 sleds per chassis = 12 hosts per chassis)
+- **QEMU support**: The `fby35` machine is emulated in QEMU for development
+
+```bash
+# Run Yosemite v3.5 in QEMU (BMC + one BIC)
+qemu-system-arm -machine fby35 \
+    -drive file=obmc-bmc.mtd,format=raw,if=mtd \
+    -drive file=obmc-bic.mtd,format=raw,if=mtd \
+    -nographic
+```
+
+### When to Choose Each Approach
+
+**Use direct IPMB** when:
+- You have 2-4 hosts in a simple twin-server or blade chassis
+- Your platform uses traditional IPMI and you need backward compatibility
+- Hardware cost is a primary constraint
+- You already have a working single-host OpenBMC and just need to multiply it
+
+**Use satellite BICs (OpenBIC)** when:
+- You have 4+ hosts per BMC and need to scale management
+- You need per-host failure isolation (a hung sensor poll on one host must not affect others)
+- Your platform uses modern MCTP/PLDM protocols
+- You want local firmware update capability on each sled
+- You are building an OCP-compliant multi-node server platform
+
+{: .tip }
+The two approaches are not mutually exclusive. Some platforms use BICs for server sleds while still using IPMB for legacy expansion cards or chassis management controllers within the same system.
+
+---
+
 ## Troubleshooting
 
 ### Issue: IPMB Bridge Fails to Start
@@ -814,6 +993,12 @@ i2ctransfer -y 1 w1@0x70 0x00
 - [phosphor-host-ipmid (GitHub)](https://github.com/openbmc/phosphor-host-ipmid) - Host-side IPMI daemon
 - [bmcweb (GitHub)](https://github.com/openbmc/bmcweb) - Redfish/REST API server
 - [D-Bus Interface Definitions](https://github.com/openbmc/phosphor-dbus-interfaces/tree/master/yaml/xyz/openbmc_project/State) - State interface YAML definitions
+
+### OpenBIC / Satellite Processor Resources
+- [OpenBIC (GitHub)](https://github.com/facebook/OpenBIC) - Open-source Bridge IC firmware framework
+- [OpenBIC Documentation](https://facebook.github.io/OpenBIC/) - API and MCTP service documentation
+- [ASPEED BIC Products](https://www.aspeedtech.com/bic/) - AST1030/AST1035 Bridge IC hardware
+- [Yosemite v3.5 QEMU Emulation](https://www.qemu.org/docs/master/system/arm/fby35.html) - BMC + BIC emulation for development
 
 ### Related Guides
 - [MCTP & PLDM Guide]({% link docs/05-advanced/01-mctp-pldm-guide.md %}) - Alternative multi-endpoint management via PLDM
