@@ -36,6 +36,7 @@ BIOS configuration management uses the `biosconfig_manager` service, which expos
 - SPI flash access with GPIO mux switching (obmc-flash-bios)
 - Redfish UpdateService for BIOS image uploads
 - biosconfig_manager for remote BIOS configuration
+- PLDM Type 3 (DSP0247) BIOS Control and Configuration — BIOS tables, pldmtool, attribute JSON
 - Pending attributes and apply-on-next-boot workflow
 - Multi-host firmware management patterns
 
@@ -335,6 +336,234 @@ See the complete example at [examples/bios-config/]({{ site.baseurl }}/examples/
 
 ---
 
+## PLDM-Based BIOS Configuration (DSP0247)
+
+For platforms that use PLDM (Platform Level Data Model) between the BMC and host, BIOS configuration is handled through **PLDM Type 3 — BIOS Control and Configuration**, defined in DMTF specification [DSP0247](https://www.dmtf.org/sites/default/files/standards/documents/DSP0247_1.0.0.pdf). This is the modern alternative to IPMI-based BIOS attribute exchange and is used on IBM POWER, ARM, and other PLDM-enabled platforms.
+
+### How PLDM BIOS Configuration Works
+
+The host BIOS and the BMC's `pldmd` daemon exchange BIOS attributes using three PLDM BIOS tables and a set of PLDM commands. The `pldmd` daemon acts as the bridge between the host and the `biosconfig_manager` D-Bus service.
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│             PLDM BIOS Configuration Data Flow                     │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Admin (Redfish/CLI)                                              │
+│       │                                                           │
+│       ▼                                                           │
+│  ┌──────────────┐   D-Bus    ┌──────────────┐   PLDM/MCTP         │
+│  │ bmcweb       │──────────▶│ biosconfig   │◀────────────┐        │
+│  │ /Bios        │           │ _manager     │             │        │
+│  └──────────────┘           │              │             │        │
+│                             │ BaseBIOSTable│             │        │
+│                             │ Pending      │             │        │
+│                             │ Attributes   │             │        │
+│                             └──────┬───────┘             │        │
+│                                    │ D-Bus               │        │
+│                                    ▼                     │        │
+│                             ┌──────────────┐             │        │
+│                             │ pldmd        │─────────────┘        │
+│                             │              │                      │
+│                             │ BIOS Tables: │   PLDM over MCTP     │
+│                             │  - String    │◀────────────────┐    │
+│                             │  - Attribute │                 │    │
+│                             │  - Value     │                 │    │
+│                             └──────────────┘                 │    │
+│                                                              │    │
+│                             ┌──────────────┐                 │    │
+│                             │  Host BIOS   │─────────────────┘    │
+│                             │  (PLDM       │                      │
+│                             │   terminus)  │                      │
+│                             └──────────────┘                      │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### The Three PLDM BIOS Tables
+
+PLDM BIOS uses three interrelated tables to represent all BIOS configuration data:
+
+| Table | PLDM Table Type | Purpose |
+|-------|----------------|---------|
+| **String Table** | 0 | Dictionary of all strings used by attributes (names, option labels, help text) |
+| **Attribute Table** | 1 | Schema for each attribute: type (enum/integer/string), constraints, default values |
+| **Attribute Value Table** | 2 | Current runtime values for each attribute |
+
+These tables are exchanged between the host BIOS and the BMC using PLDM commands:
+
+| PLDM Command | Direction | Description |
+|-------------|-----------|-------------|
+| `GetBIOSTable` | BMC → Host | BMC requests a BIOS table from the host |
+| `SetBIOSTable` | Host → BMC | Host sends a complete BIOS table to the BMC |
+| `GetBIOSAttributeCurrentValueByHandle` | BMC → Host | Read a single attribute's current value |
+| `SetBIOSAttributeCurrentValue` | Host → BMC or BMC → Host | Update a single attribute value |
+
+### PLDM BIOS Boot Sequence
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│               PLDM BIOS Configuration Timeline                   │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   HOST BIOS                              BMC (pldmd)             │
+│   ─────────                              ──────────              │
+│      │                                      │                    │
+│  1.  │── SetBIOSTable (String)  ──────────▶ │  Store string      │
+│      │                                      │  table             │
+│  2.  │── SetBIOSTable (Attribute) ────────▶ │  Store attribute   │
+│      │                                      │  definitions       │
+│  3.  │── SetBIOSTable (AttrValue) ────────▶ │  Store current     │
+│      │                                      │  values            │
+│      │                                      │                    │
+│      │                             pldmd populates               │
+│      │                             BaseBIOSTable on D-Bus        │
+│      │                                      │                    │
+│  4.  │◀── GetBIOSTable (Pending) ────────── │  Send any pending  │
+│      │                                      │  attribute changes │
+│  5.  │  Apply pending attributes            │                    │
+│      │                                      │                    │
+│  6.  │── SetBIOSAttributeCurrentValue ────▶ │  Report updated    │
+│      │                                      │  values            │
+│      │                                      │                    │
+│  7.  │  Continue POST                       │  Clear pending     │
+│      │                                      │  attributes        │
+│      ▼                                      ▼                    │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### PLDM BIOS Attribute JSON Configuration
+
+For PLDM-based systems, OEM vendors define BIOS attributes in JSON files that `pldmd` parses to initialize the `BaseBIOSTable`. These files define the attribute schema — `pldmd` converts them to PLDM BIOS table format.
+
+```json
+{
+    "entries": [
+        {
+            "attribute_type": "enum",
+            "attribute_name": "HyperThreading",
+            "possible_values": ["Enabled", "Disabled"],
+            "default_values": ["Enabled"],
+            "display_name": "Hyper-Threading Technology",
+            "help_text": "Enable or disable CPU Hyper-Threading",
+            "read_only": false,
+            "dbus": {
+                "object_path": "/xyz/openbmc_project/bios_config/manager",
+                "interface": "xyz.openbmc_project.BIOSConfig.Manager",
+                "property_name": "HyperThreading",
+                "property_type": "string"
+            }
+        },
+        {
+            "attribute_type": "integer",
+            "attribute_name": "MemoryFrequency",
+            "lower_bound": 1600,
+            "upper_bound": 4800,
+            "scalar_increment": 400,
+            "default_value": 3200,
+            "display_name": "Memory Operating Frequency (MHz)",
+            "help_text": "Set DDR memory operating frequency",
+            "read_only": false
+        },
+        {
+            "attribute_type": "string",
+            "attribute_name": "AssetTag",
+            "string_type": "ASCII",
+            "minimum_string_length": 0,
+            "maximum_string_length": 64,
+            "default_string": "",
+            "display_name": "System Asset Tag",
+            "read_only": false
+        }
+    ]
+}
+```
+
+Install this file in your machine layer:
+
+```bitbake
+# meta-<machine>/recipes-phosphor/pldm/pldm_%.bbappend
+FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"
+SRC_URI += "file://bios_attrs.json"
+
+do_install:append() {
+    install -d ${D}${datadir}/pldm/bios
+    install -m 0644 ${WORKDIR}/bios_attrs.json \
+        ${D}${datadir}/pldm/bios/
+}
+```
+
+### Using pldmtool for BIOS Operations
+
+The `pldmtool` CLI on the BMC provides direct access to PLDM BIOS commands for debugging and testing.
+
+```bash
+# Get the BIOS String Table (type 0)
+pldmtool bios GetBIOSTable -t 0
+
+# Get the BIOS Attribute Table (type 1) -- shows attribute definitions
+pldmtool bios GetBIOSTable -t 1
+
+# Get the BIOS Attribute Value Table (type 2) -- shows current values
+pldmtool bios GetBIOSTable -t 2
+
+# Get a single attribute's current value by handle
+pldmtool bios GetBIOSAttributeCurrentValueByHandle -a HyperThreading
+
+# Set a BIOS attribute value
+pldmtool bios SetBIOSAttributeCurrentValue -a HyperThreading -d Disabled
+```
+
+{: .tip }
+Use `pldmtool bios GetBIOSTable -t 1` to discover all available BIOS attributes and their valid values. This is the PLDM equivalent of viewing the BIOS setup menu.
+
+### PLDM vs IPMI for BIOS Configuration
+
+| Aspect | IPMI (Traditional) | PLDM (Modern) |
+|--------|-------------------|---------------|
+| **Transport** | IPMB / KCS / BT | MCTP over I3C, SMBus, or PCIe VDM |
+| **Specification** | Vendor-specific OEM commands | DMTF DSP0247 (standardized) |
+| **Attribute discovery** | Not standardized — requires vendor docs | Self-describing via PLDM BIOS tables |
+| **Data model** | Flat key-value | Typed attributes (enum, int, string) with constraints |
+| **Pending attributes** | Vendor-dependent | Standardized pending table exchange |
+| **Security** | No built-in auth | SPDM integration possible over MCTP |
+| **Platforms** | Legacy x86, older BMC designs | IBM POWER, ARM SBMR, OCP servers |
+
+{: .note }
+Both IPMI and PLDM ultimately populate the same `biosconfig_manager` D-Bus interface. Redfish consumers do not need to know which protocol the host uses — the Redfish `/Systems/system/Bios` endpoint works identically regardless of the underlying transport.
+
+### Troubleshooting PLDM BIOS
+
+**BIOS tables not populated after host boot:**
+```bash
+# Check if pldmd discovered the host as a PLDM terminus
+pldmtool base GetTID
+
+# Check if BIOS tables were received
+journalctl -u pldmd -f | grep -i bios
+
+# Verify MCTP connectivity to the host
+busctl tree xyz.openbmc_project.MCTP
+```
+
+**Pending attributes not reaching the host:**
+```bash
+# Verify pending attributes are set on D-Bus
+busctl get-property xyz.openbmc_project.BIOSConfigManager \
+    /xyz/openbmc_project/bios_config/manager \
+    xyz.openbmc_project.BIOSConfig.Manager \
+    PendingAttributes
+
+# Check pldmd logs for pending attribute transfer
+journalctl -u pldmd --no-pager | grep -i pending
+```
+
+**Attribute type mismatch errors:**
+Ensure your `bios_attrs.json` matches the host BIOS attribute types exactly. An enum attribute on the host cannot be set with an integer value from the BMC. Use `pldmtool bios GetBIOSTable -t 1` to verify attribute definitions.
+
+---
+
 ## Multi-Host Firmware Management
 
 In multi-host platforms (blade servers, multi-node chassis), the BMC manages BIOS firmware for multiple host processors independently. Each host has its own SPI flash, GPIO mux, and D-Bus object path.
@@ -486,10 +715,13 @@ obmcutil state                                                          # Host p
 ### Related Guides
 - [Firmware Update Guide]({% link docs/05-advanced/03-firmware-update-guide.md %})
 - [Secure Boot & Image Signing]({% link docs/05-advanced/13-secure-boot-signing-guide.md %})
+- [MCTP & PLDM Guide]({% link docs/05-advanced/01-mctp-pldm-guide.md %}) - PLDM transport and sensor monitoring
 
 ### External Documentation
 - [DMTF Redfish Bios Resource (DSP0268)](https://www.dmtf.org/standards/redfish)
+- [PLDM for BIOS Control and Configuration (DSP0247)](https://www.dmtf.org/sites/default/files/standards/documents/DSP0247_1.0.0.pdf)
 - [ASPEED AST2600 SPI Controller Documentation](https://www.aspeedtech.com/)
+- [OpenBMC Remote BIOS Configuration Design](https://github.com/openbmc/docs/blob/master/designs/remote-bios-configuration.md)
 
 ---
 
