@@ -38,6 +38,7 @@ Modern platform management relies on standardized protocols for component commun
 | [PLDM Platform Monitoring]({% link docs/05-advanced/19-pldm-platform-monitoring-guide.md %}) | Type 2 sensors, PDRs, effecters, events | Advanced |
 | [SPDM]({% link docs/05-advanced/02-spdm-guide.md %}) | Device attestation, security | Advanced |
 | [Secure Boot & Signing]({% link docs/05-advanced/13-secure-boot-signing-guide.md %}) | Image signing, hardware root of trust | Advanced |
+| [DICE Security]({% link docs/05-advanced/21-dice-security-guide.md %}) | Hardware root-of-trust for device identity and firmware attestation | Advanced |
 
 ### Firmware Management
 
