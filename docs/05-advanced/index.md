@@ -12,7 +12,7 @@ Dive into advanced protocols, security features, logging, and debug capabilities
 
 ## What You'll Learn
 
-- MCTP and PLDM for platform management
+- MCTP and PLDM for platform management (sensors, firmware update, BIOS config)
 - SPDM for device attestation and security
 - Secure boot and image signing
 - Logging, diagnostics, and debug tools
@@ -35,6 +35,7 @@ Modern platform management relies on standardized protocols for component commun
 | Guide | Description | Difficulty |
 |-------|-------------|------------|
 | [MCTP/PLDM]({% link docs/05-advanced/01-mctp-pldm-guide.md %}) | Platform management protocols | Advanced |
+| [PLDM Platform Monitoring]({% link docs/05-advanced/19-pldm-platform-monitoring-guide.md %}) | Type 2 sensors, PDRs, effecters, events | Advanced |
 | [SPDM]({% link docs/05-advanced/02-spdm-guide.md %}) | Device attestation, security | Advanced |
 | [Secure Boot & Signing]({% link docs/05-advanced/13-secure-boot-signing-guide.md %}) | Image signing, hardware root of trust | Advanced |
 
@@ -43,6 +44,7 @@ Modern platform management relies on standardized protocols for component commun
 | Guide | Description |
 |-------|-------------|
 | [Firmware Update]({% link docs/05-advanced/03-firmware-update-guide.md %}) | BMC/PNOR updates, signing |
+| [PLDM Firmware Update]({% link docs/05-advanced/20-pldm-firmware-update-guide.md %}) | Type 5 device firmware update via PLDM |
 | [BIOS Firmware Management]({% link docs/05-advanced/16-bios-firmware-management-guide.md %}) | Host firmware update via BMC, BIOS config |
 
 ### Debug Features
