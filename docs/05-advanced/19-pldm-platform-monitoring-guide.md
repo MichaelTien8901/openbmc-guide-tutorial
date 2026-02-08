@@ -74,7 +74,7 @@ This guide focuses on PLDM Type 2 specifically. For MCTP transport configuration
 │  └──────────────────────┬─────────────────────────────────────┘    │
 │                         │                                          │
 │  ┌──────────────────────┴─────────────────────────────────────┐    │
-│  │                    pldmd (platform-mc)                      │    │
+│  │                    pldmd (platform-mc)                     │    │
 │  │                                                            │    │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │    │
 │  │  │ PDR Manager  │  │ Sensor       │  │ Event        │      │    │
@@ -86,15 +86,15 @@ This guide focuses on PLDM Type 2 specifically. For MCTP transport configuration
 │  └────────────────────────┬───────────────────────────────────┘    │
 │                           │  PLDM over MCTP                        │
 │            ┌──────────────┼──────────────┐                         │
-│            │              │              │                          │
-│      ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐                    │
-│      │  GPU      │ │  NIC      │ │  BIC      │  PLDM Termini      │
-│      │  EID:10   │ │  EID:11   │ │  EID:12   │  (Responders)      │
-│      │  Sensors: │ │  Sensors: │ │  Sensors: │                    │
-│      │  - Temp   │ │  - Temp   │ │  - CPU T  │                    │
-│      │  - Power  │ │  - Link   │ │  - DIMM T │                    │
-│      │  - Util%  │ │  - Errors │ │  - Volt   │                    │
-│      └───────────┘ └───────────┘ └───────────┘                    │
+│            │              │              │                         │
+│      ┌─────┴─────┐ ┌──────┴─────┐ ┌──────┴─────┐                   │
+│      │  GPU      │ │  NIC       │ │  BIC       │  PLDM Termini     │
+│      │  EID:10   │ │  EID:11    │ │  EID:12    │  (Responders)     │
+│      │  Sensors: │ │  Sensors:  │ │  Sensors:  │                   │
+│      │  - Temp   │ │  - Temp    │ │  - CPU T   │                   │
+│      │  - Power  │ │  - Link    │ │  - DIMM T  │                   │
+│      │  - Util%  │ │  - Errors  │ │  - Volt    │                   │
+│      └───────────┘ └────────────┘ └────────────┘                   │
 │                                                                    │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -144,17 +144,17 @@ PDRs are the foundation of PLDM monitoring. Each PLDM terminus (device) maintain
 Every PDR starts with a common header:
 
 ```
-┌───────────────────────────────────────────────────────────┐
-│                   PDR Common Header                        │
-├───────────────────────────────────────────────────────────┤
-│  Record Handle      (4 bytes)  Unique ID in the repo      │
-│  PDR Header Version (1 byte)   Always 0x01                 │
-│  PDR Type           (1 byte)   See PDR Types table above   │
-│  Record Change #    (2 bytes)  Incremented on change       │
+┌─────────────────────────────────────────────────────────────┐
+│                   PDR Common Header                         │
+├─────────────────────────────────────────────────────────────┤
+│  Record Handle      (4 bytes)  Unique ID in the repo        │
+│  PDR Header Version (1 byte)   Always 0x01                  │
+│  PDR Type           (1 byte)   See PDR Types table above    │
+│  Record Change #    (2 bytes)  Incremented on change        │
 │  Data Length        (2 bytes)  Length of type-specific data │
-├───────────────────────────────────────────────────────────┤
-│  Type-specific PDR data (variable)                         │
-└───────────────────────────────────────────────────────────┘
+├─────────────────────────────────────────────────────────────┤
+│  Type-specific PDR data (variable)                          │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### Numeric Sensor PDR
@@ -162,9 +162,9 @@ Every PDR starts with a common header:
 A Numeric Sensor PDR fully describes one numeric sensor:
 
 ```
-┌───────────────────────────────────────────────────────────┐
-│              Numeric Sensor PDR (Type 2)                    │
-├───────────────────────────────────────────────────────────┤
+┌────────────────────────────────────────────────────────────┐
+│              Numeric Sensor PDR (Type 2)                   │
+├────────────────────────────────────────────────────────────┤
 │  PLDMTerminusHandle    Which terminus owns this sensor     │
 │  SensorID              Unique sensor ID within terminus    │
 │  EntityType            What entity (CPU, DIMM, fan, etc.)  │
@@ -184,15 +184,15 @@ A Numeric Sensor PDR fully describes one numeric sensor:
 │  WarningLow            Warning low threshold               │
 │  CriticalLow           Critical low threshold              │
 │  FatalLow              Fatal low threshold                 │
-└───────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────┘
 ```
 
 ### State Sensor PDR
 
 ```
-┌───────────────────────────────────────────────────────────┐
-│              State Sensor PDR (Type 4)                      │
-├───────────────────────────────────────────────────────────┤
+┌────────────────────────────────────────────────────────────┐
+│              State Sensor PDR (Type 4)                     │
+├────────────────────────────────────────────────────────────┤
 │  PLDMTerminusHandle    Which terminus owns this sensor     │
 │  SensorID              Unique sensor ID within terminus    │
 │  EntityType            What entity                         │
@@ -202,7 +202,7 @@ A Numeric Sensor PDR fully describes one numeric sensor:
 │    StateSetID          Which state set (see State Sets)    │
 │    PossibleStatesSize  How many possible states            │
 │    PossibleStates      Bitmask of valid states             │
-└───────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────┘
 ```
 
 ### Entity Types (Common)
@@ -446,8 +446,8 @@ PLDM devices can send asynchronous event notifications to the BMC using the `Pla
 ### Sensor Event Flow
 
 ```
-Device (PLDM Terminus)                    BMC (pldmd)
-      │                                       │
+Device (PLDM Terminus)                     BMC (pldmd)
+      │                                        │
       │  Sensor exceeds critical threshold     │
       │                                        │
       │  PlatformEventMessage                  │
@@ -463,7 +463,7 @@ Device (PLDM Terminus)                    BMC (pldmd)
       │  presentReading: 96                    │
       │                                        │
       │  PlatformEventMessage ACK              │
-      │◀─────────────────────────────────────── │
+      │◀────────────────────────────────────── │
       │                                        │
       │                          pldmd updates D-Bus:
       │                          CriticalAlarmHigh = true

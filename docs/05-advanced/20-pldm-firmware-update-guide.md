@@ -57,9 +57,9 @@ The key design principle: the **FD pulls data from the UA**. The UA does not pus
 ### Update Flow Overview
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────────────────┐
 │            PLDM Firmware Update Architecture                        │
-├────────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │                         BMC                                  │   │
@@ -72,7 +72,7 @@ The key design principle: the **FD pulls data from the UA**. The UA does not pus
 │  │       ▼                                                      │   │
 │  │  pldmd (Update Agent)                                        │   │
 │  │  ┌─────────────────────────────────────────────────────┐     │   │
-│  │  │ 1. Parse PLDM FW package                           │     │   │
+│  │  │ 1. Parse PLDM FW package                            │     │   │
 │  │  │ 2. Match package to target FD (device descriptors)  │     │   │
 │  │  │ 3. RequestUpdate → FD                               │     │   │
 │  │  │ 4. PassComponentTable → FD                          │     │   │
@@ -86,7 +86,7 @@ The key design principle: the **FD pulls data from the UA**. The UA does not pus
 │                                 │  PLDM over MCTP                   │
 │                                 │                                   │
 │  ┌──────────────────────────────┴───────────────────────────────┐   │
-│  │                    Firmware Device (FD)                       │   │
+│  │                    Firmware Device (FD)                      │   │
 │  │                                                              │   │
 │  │  ┌─────────────────────────────────────────────────────┐     │   │
 │  │  │ 1. Accept RequestUpdate                             │     │   │
@@ -101,7 +101,7 @@ The key design principle: the **FD pulls data from the UA**. The UA does not pus
 │  │  └─────────────────────────────────────────────────────┘     │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                     │
-└────────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### State Machine
@@ -190,9 +190,9 @@ The Firmware Device progresses through these states during an update:
 A PLDM firmware update package bundles one or more component images with metadata:
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │               PLDM Firmware Update Package               │
-├─────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────┤
 │                                                          │
 │  ┌────────────────────────────────────────────────────┐  │
 │  │  Package Header Information                        │  │
@@ -238,7 +238,7 @@ A PLDM firmware update package bundles one or more component images with metadat
 │  │  Component Image N ...                             │  │
 │  └────────────────────────────────────────────────────┘  │
 │                                                          │
-└─────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### Component Classifications
@@ -411,17 +411,17 @@ UA (BMC pldmd)                               FD (Device)
       │                                           │
       │          RequestFirmwareData              │
       │◀──────────────────────────────────────────│
-      │          Offset=0, Length=4096             │
+      │          Offset=0, Length=4096            │
       │                                           │
-      │          RequestFirmwareData response      │
+      │          RequestFirmwareData response     │
       │──────────────────────────────────────────▶│
-      │          (4096 bytes of image data)        │
+      │          (4096 bytes of image data)       │
       │                                           │
-      │          ... (repeats until all data sent) │
+      │          ... (repeats until all data sent)│
       │                                           │
       │          RequestFirmwareData              │
       │◀──────────────────────────────────────────│
-      │          Offset=2093056, Length=4096       │
+      │          Offset=2093056, Length=4096      │
       │          (final chunk)                    │
       │                                           │
       │  ══════ VERIFY & APPLY ══════             │
@@ -458,7 +458,7 @@ UA (BMC pldmd)                               FD (Device)
       │◀──────────────────────────────────────────│
       │  EstimatedTimeForActivation=30s           │
       │                                           │
-      │  (Device resets and boots new firmware)    │
+      │  (Device resets and boots new firmware)   │
       │                                           │
 ```
 
