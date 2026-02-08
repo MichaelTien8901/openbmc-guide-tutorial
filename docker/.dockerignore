@@ -1,0 +1,9 @@
+*.md
+.git
+.gitignore
+_site
+.jekyll-cache
+.sass-cache
+node_modules
+.vscode
+.devcontainer

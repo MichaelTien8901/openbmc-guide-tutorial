@@ -324,28 +324,141 @@ Create `.vscode/c_cpp_properties.json`:
 }
 ```
 
-### VS Code with Docker Dev Containers
+### VS Code Dev Container (Recommended for Docker Users)
 
-Create `.devcontainer/devcontainer.json`:
+This project includes a ready-to-use Dev Container configuration that provides a complete OpenBMC build environment with pre-configured tools, extensions, and build caching.
 
-```json
-{
-    "name": "OpenBMC Dev",
-    "image": "crops/poky:ubuntu-22.04",
-    "customizations": {
-        "vscode": {
-            "extensions": [
-                "ms-vscode.cpptools",
-                "ms-python.python"
-            ]
-        }
-    },
-    "mounts": [
-        "source=${localWorkspaceFolder},target=/home/openbmc/openbmc,type=bind"
-    ],
-    "remoteUser": "pokyuser"
-}
+#### Prerequisites
+
+- [VS Code](https://code.visualstudio.com/) with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/macOS) or Docker Engine (Linux)
+
+#### Directory Layout
+
+The Dev Container expects your workspace to look like this:
+
 ```
+your-workspace/
+├── openbmc/                    # OpenBMC source (cloned from GitHub)
+└── openbmc-guide-tutorial/     # This repository (contains .devcontainer/)
+```
+
+{: .warning }
+You **must** clone the `openbmc` repository as a sibling directory before opening the Dev Container. The container will fail to start if it is missing.
+
+#### Setup Steps
+
+```bash
+# 1. Create workspace and clone both repos side by side
+mkdir -p ~/openbmc-workspace && cd ~/openbmc-workspace
+git clone https://github.com/openbmc/openbmc.git
+git clone https://github.com/michaeltien8901/openbmc-guide-tutorial.git
+
+# 2. Open the tutorial repo in VS Code
+code openbmc-guide-tutorial
+```
+
+Then in VS Code, press **F1** → **Dev Containers: Reopen in Container**. The first build takes several minutes; subsequent opens use cached layers.
+
+#### What You Get
+
+| Feature | Details |
+|---------|---------|
+| **Base image** | Ubuntu 22.04 with all Yocto/BitBake dependencies |
+| **User** | `openbmc` with `sudo` access; UID auto-mapped to your host UID |
+| **Build caching** | `sstate-cache` and `downloads` persist in Docker volumes across rebuilds |
+| **SSH agent** | Forwarded from host — use `ssh-add -l` to verify |
+| **Build env** | `oe-init-build-env` sourced automatically; `PARALLEL_MAKE` and `BB_NUMBER_THREADS` set to `$(nproc)` |
+| **QEMU** | `qemu-system-arm` pre-installed for testing |
+| **Extensions** | C/C++, Python, YAML, BitBake, GitLens, Git Graph, Code Spell Checker |
+| **Forwarded ports** | 2222 (BMC SSH), 2443 (BMC HTTPS/Redfish), 2623 (BMC IPMI) |
+
+#### Building OpenBMC Inside the Container
+
+Once the container starts, the terminal is already inside `/workspace/openbmc` with the build environment initialized:
+
+```bash
+# Build the full image
+bitbake obmc-phosphor-image
+
+# Or build a single recipe
+bitbake phosphor-webui
+```
+
+#### Build Caching with Docker Volumes
+
+BitBake uses two large directories during builds:
+
+- **`downloads/`** (`DL_DIR`) — upstream source tarballs fetched from the internet (several GB)
+- **`sstate-cache/`** (`SSTATE_DIR`) — shared state cache of previously compiled outputs (saves hours on rebuilds)
+
+The Dev Container mounts both as **Docker named volumes** rather than bind mounts:
+
+```
+source=openbmc-downloads,target=/workspace/openbmc/build/downloads,type=volume
+source=openbmc-sstate-cache,target=/workspace/openbmc/build/sstate-cache,type=volume
+```
+
+This means:
+- The data lives on your host in Docker-managed storage (`/var/lib/docker/volumes/`), **not** inside the container
+- Deleting or rebuilding the container does not lose cached data
+- **No `local.conf` configuration needed** — BitBake's default `DL_DIR` (`build/downloads/`) matches the mount target, so it works automatically
+- **Shared across projects** — any container using the same volume name (e.g., `openbmc-downloads`) shares the same downloaded sources, avoiding redundant multi-GB downloads
+
+{: .tip }
+`docker system prune` does **not** delete named volumes. To fully reset build caches, explicitly remove them: `docker volume rm openbmc-sstate-cache openbmc-downloads`.
+
+#### Using Dev Container from the CLI (Without VS Code)
+
+You can use the Dev Container from any terminal using the [Dev Container CLI](https://github.com/devcontainers/cli):
+
+```bash
+# Install the CLI
+npm install -g @devcontainers/cli
+
+# Build and start the container
+devcontainer up --workspace-folder ./openbmc-guide-tutorial
+
+# Open an interactive shell inside it
+devcontainer exec --workspace-folder ./openbmc-guide-tutorial bash
+
+# Run a single command
+devcontainer exec --workspace-folder ./openbmc-guide-tutorial \
+    bitbake obmc-phosphor-image
+```
+
+{: .note }
+The `--workspace-folder` points to the directory containing `.devcontainer/devcontainer.json`. The folder name does not matter — you can clone this repository as any name you like. The only requirement is that the `openbmc` source is cloned as a sibling directory next to it:
+
+```
+your-workspace/
+├── openbmc/              # Must exist at ../openbmc relative to the folder below
+└── any-name-you-want/    # Contains .devcontainer/devcontainer.json
+```
+
+#### Git Identity
+
+The container does **not** set a git identity — it inherits your host's git configuration. If git prompts you to set `user.name` and `user.email`, configure them either on your host or inside the container:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+```
+
+#### Troubleshooting Dev Container
+
+**Container fails to start with "openbmc source not found":**
+Ensure `openbmc/` is cloned as a sibling directory next to `openbmc-guide-tutorial/`.
+
+**SSH agent not working (`ssh-add -l` shows error):**
+Make sure your SSH agent is running on the host before opening the container:
+```bash
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+```
+
+**File permission issues:**
+The `updateRemoteUserUID` setting should handle this automatically. If you still see permission errors, rebuild the container: **F1** → **Dev Containers: Rebuild Container**.
 
 ---
 

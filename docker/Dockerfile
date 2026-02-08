@@ -13,8 +13,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
-# Install Yocto/BitBake dependencies
-RUN apt-get update && apt-get install -y \
+# Layer 1: Yocto/BitBake core dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gawk \
     wget \
     git \
@@ -34,25 +34,28 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     python3-git \
     python3-jinja2 \
-    libegl1-mesa \
-    libsdl1.2-dev \
     pylint \
-    xterm \
     python3-subunit \
-    mesa-common-dev \
     zstd \
     liblz4-tool \
     locales \
-    # Additional useful tools
     curl \
+    libssl-dev \
+    libffi-dev \
+    sudo \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Layer 2: Dev tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     tmux \
     htop \
     tree \
-    libssl-dev \
-    libffi-dev \
-    sudo \
-    # QEMU for testing
+    && rm -rf /var/lib/apt/lists/*
+
+# Layer 3: QEMU for testing
+RUN apt-get update && apt-get install -y --no-install-recommends \
     qemu-system-arm \
     && rm -rf /var/lib/apt/lists/*
 
@@ -60,10 +63,8 @@ RUN apt-get update && apt-get install -y \
 RUN locale-gen en_US.UTF-8
 
 # Create non-root user for builds (Yocto requirement)
-ARG USER_ID=1000
-ARG GROUP_ID=1000
-RUN groupadd -g ${GROUP_ID} openbmc \
-    && useradd -u ${USER_ID} -g openbmc -m -s /bin/bash openbmc \
+RUN groupadd -g 1000 openbmc \
+    && useradd -u 1000 -g openbmc -m -s /bin/bash openbmc \
     && echo "openbmc ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Set up workspace
@@ -72,11 +73,6 @@ RUN mkdir -p /workspace && chown openbmc:openbmc /workspace
 # Switch to non-root user
 USER openbmc
 WORKDIR /workspace
-
-# Set Git configuration (required for Yocto)
-RUN git config --global user.email "openbmc@example.com" \
-    && git config --global user.name "OpenBMC Builder" \
-    && git config --global color.ui auto
 
 # Default command
 CMD ["/bin/bash"]
