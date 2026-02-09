@@ -357,11 +357,11 @@ The `examples/devcontainer/` directory in this tutorial contains the reference `
 
 | Feature | Details |
 |---------|---------|
-| **Base image** | Ubuntu 22.04 with all Yocto/BitBake dependencies |
+| **Base image** | Ubuntu 24.04 with all Yocto/BitBake dependencies |
 | **User** | `openbmc` with `sudo` access; UID auto-mapped to your host UID |
 | **Build caching** | `sstate-cache` and `downloads` persist in Docker volumes across rebuilds |
 | **Build env** | `oe-init-build-env` sourced automatically; `PARALLEL_MAKE` and `BB_NUMBER_THREADS` set to `$(nproc)` |
-| **QEMU** | `qemu-system-arm` pre-installed for testing |
+| **QEMU** | `qemu-system-arm` 8.2+ pre-installed with ast2600-evb support |
 | **Extensions** | C/C++, Python, YAML, BitBake, GitLens, Git Graph, Code Spell Checker |
 | **Forwarded ports** | 2222 (BMC SSH), 2443 (BMC HTTPS/Redfish), 2623 (BMC IPMI) |
 

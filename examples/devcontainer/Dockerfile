@@ -1,9 +1,10 @@
 # OpenBMC Build Environment
-# Based on Ubuntu 22.04 with all required dependencies
+# Based on Ubuntu 24.04 with all required dependencies
+# Includes QEMU 8.2+ with ast2600-evb support
 #
 # Usage: Place this file at openbmc/.devcontainer/Dockerfile
 
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 LABEL maintainer="OpenBMC Guide Tutorial"
 LABEL description="OpenBMC development and build environment"
