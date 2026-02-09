@@ -1,5 +1,7 @@
 # OpenBMC Build Environment
 # Based on Ubuntu 22.04 with all required dependencies
+#
+# Usage: Place this file at openbmc/.devcontainer/Dockerfile
 
 FROM ubuntu:22.04
 
@@ -67,12 +69,9 @@ RUN groupadd -g 1000 openbmc \
     && useradd -u 1000 -g openbmc -m -s /bin/bash openbmc \
     && echo "openbmc ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# Set up workspace
-RUN mkdir -p /workspace && chown openbmc:openbmc /workspace
-
 # Switch to non-root user
 USER openbmc
-WORKDIR /workspace
+WORKDIR /home/openbmc
 
 # Default command
 CMD ["/bin/bash"]

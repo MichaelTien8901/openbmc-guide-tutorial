@@ -326,39 +326,32 @@ Create `.vscode/c_cpp_properties.json`:
 
 ### VS Code Dev Container (Recommended for Docker Users)
 
-This project includes a ready-to-use Dev Container configuration that provides a complete OpenBMC build environment with pre-configured tools, extensions, and build caching.
+A ready-to-use Dev Container configuration provides a complete OpenBMC build environment with pre-configured tools, extensions, and build caching. The devcontainer is designed to live inside the openbmc repo itself — you open the openbmc repo in VS Code and everything works.
 
 #### Prerequisites
 
 - [VS Code](https://code.visualstudio.com/) with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/macOS) or Docker Engine (Linux)
 
-#### Directory Layout
-
-The Dev Container expects your workspace to look like this:
-
-```
-your-workspace/
-├── openbmc/                    # OpenBMC source (cloned from GitHub)
-└── openbmc-guide-tutorial/     # This repository (contains .devcontainer/)
-```
-
-{: .warning }
-You **must** clone the `openbmc` repository as a sibling directory before opening the Dev Container. The container will fail to start if it is missing.
-
 #### Setup Steps
 
 ```bash
-# 1. Create workspace and clone both repos side by side
-mkdir -p ~/openbmc-workspace && cd ~/openbmc-workspace
+# 1. Clone OpenBMC
 git clone https://github.com/openbmc/openbmc.git
-git clone https://github.com/michaeltien8901/openbmc-guide-tutorial.git
+cd openbmc
 
-# 2. Open the tutorial repo in VS Code
-code openbmc-guide-tutorial
+# 2. Add the devcontainer configuration
+#    Copy from the tutorial examples, or download directly:
+cp -r /path/to/openbmc-guide-tutorial/examples/devcontainer .devcontainer
+
+# 3. Open in VS Code
+code .
 ```
 
 Then in VS Code, press **F1** → **Dev Containers: Reopen in Container**. The first build takes several minutes; subsequent opens use cached layers.
+
+{: .tip }
+The `examples/devcontainer/` directory in this tutorial contains the reference `Dockerfile` and `devcontainer.json`. Copy the entire directory into your openbmc clone as `.devcontainer/`.
 
 #### What You Get
 
@@ -367,7 +360,6 @@ Then in VS Code, press **F1** → **Dev Containers: Reopen in Container**. The f
 | **Base image** | Ubuntu 22.04 with all Yocto/BitBake dependencies |
 | **User** | `openbmc` with `sudo` access; UID auto-mapped to your host UID |
 | **Build caching** | `sstate-cache` and `downloads` persist in Docker volumes across rebuilds |
-| **SSH agent** | Forwarded from host — use `ssh-add -l` to verify |
 | **Build env** | `oe-init-build-env` sourced automatically; `PARALLEL_MAKE` and `BB_NUMBER_THREADS` set to `$(nproc)` |
 | **QEMU** | `qemu-system-arm` pre-installed for testing |
 | **Extensions** | C/C++, Python, YAML, BitBake, GitLens, Git Graph, Code Spell Checker |
@@ -375,7 +367,7 @@ Then in VS Code, press **F1** → **Dev Containers: Reopen in Container**. The f
 
 #### Building OpenBMC Inside the Container
 
-Once the container starts, the terminal is already inside `/workspace/openbmc` with the build environment initialized:
+Once the container starts, the terminal is inside the openbmc repo with the build environment initialized:
 
 ```bash
 # Build the full image
@@ -395,8 +387,8 @@ BitBake uses two large directories during builds:
 The Dev Container mounts both as **Docker named volumes** rather than bind mounts:
 
 ```
-source=openbmc-downloads,target=/workspace/openbmc/build/downloads,type=volume
-source=openbmc-sstate-cache,target=/workspace/openbmc/build/sstate-cache,type=volume
+source=openbmc-downloads,target=<workspace>/build/downloads,type=volume
+source=openbmc-sstate-cache,target=<workspace>/build/sstate-cache,type=volume
 ```
 
 This means:
@@ -416,24 +408,15 @@ You can use the Dev Container from any terminal using the [Dev Container CLI](ht
 # Install the CLI
 npm install -g @devcontainers/cli
 
-# Build and start the container
-devcontainer up --workspace-folder ./openbmc-guide-tutorial
+# Build and start the container (from your openbmc clone with .devcontainer/)
+devcontainer up --workspace-folder ./openbmc
 
 # Open an interactive shell inside it
-devcontainer exec --workspace-folder ./openbmc-guide-tutorial bash
+devcontainer exec --workspace-folder ./openbmc bash
 
 # Run a single command
-devcontainer exec --workspace-folder ./openbmc-guide-tutorial \
+devcontainer exec --workspace-folder ./openbmc \
     bitbake obmc-phosphor-image
-```
-
-{: .note }
-The `--workspace-folder` points to the directory containing `.devcontainer/devcontainer.json`. The folder name does not matter — you can clone this repository as any name you like. The only requirement is that the `openbmc` source is cloned as a sibling directory next to it:
-
-```
-your-workspace/
-├── openbmc/              # Must exist at ../openbmc relative to the folder below
-└── any-name-you-want/    # Contains .devcontainer/devcontainer.json
 ```
 
 #### Git Identity
@@ -446,16 +429,6 @@ git config --global user.email "you@example.com"
 ```
 
 #### Troubleshooting Dev Container
-
-**Container fails to start with "openbmc source not found":**
-Ensure `openbmc/` is cloned as a sibling directory next to `openbmc-guide-tutorial/`.
-
-**SSH agent not working (`ssh-add -l` shows error):**
-Make sure your SSH agent is running on the host before opening the container:
-```bash
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519
-```
 
 **File permission issues:**
 The `updateRemoteUserUID` setting should handle this automatically. If you still see permission errors, rebuild the container: **F1** → **Dev Containers: Rebuild Container**.

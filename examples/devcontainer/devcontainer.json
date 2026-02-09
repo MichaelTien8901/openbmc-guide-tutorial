@@ -1,8 +1,7 @@
 {
     "name": "OpenBMC Development",
     "build": {
-        "dockerfile": "../docker/Dockerfile",
-        "context": "../docker"
+        "dockerfile": "Dockerfile"
     },
     "updateRemoteUserUID": true,
     "customizations": {
@@ -31,21 +30,16 @@
         }
     },
     "mounts": [
-        "source=${localWorkspaceFolder}/../openbmc,target=/workspace/openbmc,type=bind",
-        "source=openbmc-sstate-cache,target=/workspace/openbmc/build/sstate-cache,type=volume",
-        "source=openbmc-downloads,target=/workspace/openbmc/build/downloads,type=volume",
-        "source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind"
+        "source=openbmc-sstate-cache,target=${containerWorkspaceFolder}/build/sstate-cache,type=volume",
+        "source=openbmc-downloads,target=${containerWorkspaceFolder}/build/downloads,type=volume"
     ],
-    "workspaceFolder": "/workspace/openbmc",
     "remoteUser": "openbmc",
     "containerEnv": {
         "LANG": "en_US.UTF-8",
-        "LC_ALL": "en_US.UTF-8",
-        "SSH_AUTH_SOCK": "/ssh-agent"
+        "LC_ALL": "en_US.UTF-8"
     },
-    "onCreateCommand": "if [ ! -d /workspace/openbmc ]; then echo '\\n*** ERROR: openbmc source not found. Clone it next to this repo: git clone https://github.com/openbmc/openbmc.git ***\\n' && exit 1; fi",
-    "postCreateCommand": "git config --global --add safe.directory /workspace/openbmc",
-    "postStartCommand": "if [ -f /workspace/openbmc/oe-init-build-env ]; then echo \"export PARALLEL_MAKE=\\\"-j$(nproc)\\\"\" >> ~/.bashrc && echo \"export BB_NUMBER_THREADS=$(nproc)\" >> ~/.bashrc && echo 'source /workspace/openbmc/oe-init-build-env' >> ~/.bashrc; fi",
+    "postCreateCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}",
+    "postStartCommand": "if [ -f ${containerWorkspaceFolder}/oe-init-build-env ]; then echo \"export PARALLEL_MAKE=\\\"-j$(nproc)\\\"\" >> ~/.bashrc && echo \"export BB_NUMBER_THREADS=$(nproc)\" >> ~/.bashrc && echo 'source ${containerWorkspaceFolder}/oe-init-build-env' >> ~/.bashrc; fi",
     "forwardPorts": [2222, 2443, 2623],
     "portsAttributes": {
         "2222": {"label": "BMC SSH"},
