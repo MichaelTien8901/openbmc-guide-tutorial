@@ -88,11 +88,11 @@ Validate code correctness with unit tests and system behavior with integration t
 
 ### Kernel & Driver Development
 
-Modify the Linux kernel image for driver development and hardware enablement.
+Develop and debug Linux kernel drivers for BMC hardware.
 
 | Guide | Description | Difficulty |
 |-------|-------------|------------|
-| [Linux Kernel Patching]({% link docs/05-advanced/12-linux-kernel-patching-guide.md %}) | System patch files for driver development, device trees, kernel config | Advanced |
+| [Linux Kernel Driver Development]({% link docs/05-advanced/12-linux-kernel-driver-development-guide.md %}) | Kernel patching, out-of-tree modules, userspace drivers, debugging, I2C/SPI binding | Advanced |
 
 ### Multi-Host & Platform Scaling
 

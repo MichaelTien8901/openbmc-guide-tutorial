@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Linux Kernel Patching
+title: Linux Kernel Driver Development
 parent: Advanced Topics
 nav_order: 12
 difficulty: advanced
@@ -11,10 +11,10 @@ prerequisites:
   - device-tree
 ---
 
-# Linux Kernel Patching for Driver Development
+# Linux Kernel Driver Development
 {: .no_toc }
 
-Modify the Linux kernel image in OpenBMC using system patch files for driver development, bug fixes, and hardware enablement.
+Develop, debug, and integrate Linux kernel drivers for OpenBMC — from kernel patching and out-of-tree modules to userspace alternatives and end-to-end sensor binding.
 {: .fs-6 .fw-300 }
 
 ## Table of Contents
@@ -37,6 +37,10 @@ OpenBMC maintains its own kernel tree at [openbmc/linux](https://github.com/open
 - Creating and applying kernel configuration fragments
 - Device tree patching for new hardware
 - Testing kernel changes on QEMU before flashing hardware
+- Building out-of-tree kernel modules as standalone Yocto recipes
+- Userspace driver alternatives (libgpiod, i2c-dev, spidev, UIO)
+- Driver debugging techniques (dynamic_debug, ftrace, debugfs)
+- End-to-end I2C/SPI sensor binding walkthrough
 - Best practices for upstreaming patches
 
 {: .warning }
@@ -578,6 +582,649 @@ No kernel source patches needed — just the `.cfg` fragment and a `.bbappend`.
 
 ---
 
+## Out-of-Tree Kernel Modules
+
+When your driver does not belong in the upstream kernel tree — vendor-specific hardware, proprietary logic, or rapid prototyping — build it as an **out-of-tree kernel module**. This keeps your driver in its own Yocto recipe, decoupled from the kernel source and build cycle.
+
+### When to Use Out-of-Tree vs In-Tree
+
+| Factor | Out-of-Tree Module | In-Tree Patch |
+|--------|--------------------|---------------|
+| Upstream acceptance | Not planned or not possible | Planned or already accepted |
+| Build coupling | Independent recipe, faster rebuilds | Tied to full kernel rebuild |
+| Development speed | Fast iteration — rebuild only your module | Slower — full kernel compile on change |
+| Kernel API stability | Must track API changes across kernel versions | Automatically consistent |
+| Deployment | Can be updated independently of kernel | Requires full firmware image update |
+
+{: .tip }
+For most BMC production drivers, prefer in-tree patches (upstream-first policy). Use out-of-tree modules for vendor-specific hardware abstraction layers, debug/test modules, or drivers still in active prototyping.
+
+### Recipe Layout in Your Meta-Layer
+
+```
+meta-vendor/
+  meta-platform/
+    recipes-kernel/
+      my-hwmon-module/
+        my-hwmon-module_1.0.bb           # Yocto recipe
+        files/
+          Makefile                         # Kbuild Makefile
+          my_hwmon_driver.c               # Module source
+          my-hwmon-module.conf            # Autoload config
+```
+
+### Kbuild Makefile
+
+The out-of-tree module Makefile uses standard Kbuild syntax:
+
+```makefile
+# files/Makefile
+obj-m := my_hwmon_driver.o
+```
+
+For multi-file modules:
+
+```makefile
+obj-m := my_hwmon_driver.o
+my_hwmon_driver-objs := main.o i2c_ops.o sysfs_attrs.o
+```
+
+### Module Source (Minimal Example)
+
+```c
+// files/my_hwmon_driver.c
+#include <linux/module.h>
+#include <linux/i2c.h>
+#include <linux/hwmon.h>
+
+static int my_hwmon_probe(struct i2c_client *client)
+{
+    dev_info(&client->dev, "my_hwmon_driver probed at 0x%02x\n", client->addr);
+    return 0;
+}
+
+static const struct of_device_id my_hwmon_of_match[] = {
+    { .compatible = "vendor,my-sensor" },
+    { }
+};
+MODULE_DEVICE_TABLE(of, my_hwmon_of_match);
+
+static struct i2c_driver my_hwmon_driver = {
+    .driver = {
+        .name = "my-hwmon-driver",
+        .of_match_table = my_hwmon_of_match,
+    },
+    .probe = my_hwmon_probe,
+};
+module_i2c_driver(my_hwmon_driver);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Example out-of-tree hwmon driver for BMC");
+```
+
+### Yocto Recipe Using module.bbclass
+
+```bitbake
+# my-hwmon-module_1.0.bb
+SUMMARY = "Out-of-tree hwmon driver for vendor sensor"
+LICENSE = "GPL-2.0-only"
+LIC_FILES_CHKSUM = "file://my_hwmon_driver.c;beginline=1;endline=1;md5=..."
+
+SRC_URI = " \
+    file://Makefile \
+    file://my_hwmon_driver.c \
+    file://my-hwmon-module.conf \
+"
+
+S = "${WORKDIR}"
+
+inherit module
+
+# Autoload at boot
+KERNEL_MODULE_AUTOLOAD += "my_hwmon_driver"
+
+# Install autoload config
+do_install:append() {
+    install -d ${D}${sysconfdir}/modules-load.d
+    install -m 0644 ${WORKDIR}/my-hwmon-module.conf \
+        ${D}${sysconfdir}/modules-load.d/
+}
+```
+
+The `inherit module` line pulls in `module.bbclass`, which handles cross-compilation against the kernel headers, module signing (if enabled), and packaging into the correct `/lib/modules/<version>/` directory.
+
+### Module Autoloading
+
+Create a `.conf` file for `/etc/modules-load.d/`:
+
+```bash
+# files/my-hwmon-module.conf
+# Load vendor hwmon driver at boot
+my_hwmon_driver
+```
+
+Alternatively, use `KERNEL_MODULE_AUTOLOAD` in the recipe (shown above) which writes the appropriate config automatically.
+
+### Building and Testing
+
+```bash
+# Build just the module recipe
+bitbake my-hwmon-module
+
+# Build the full image (includes the module)
+bitbake obmc-phosphor-image
+
+# On the running BMC, verify the module
+lsmod | grep my_hwmon
+modinfo my_hwmon_driver
+```
+
+---
+
+## Userspace Driver Alternatives
+
+Not every hardware interaction requires a kernel driver. For simple register reads, GPIO toggling, or I2C device testing, userspace access is faster to develop and easier to debug. This section helps you decide when a userspace approach is sufficient.
+
+### Decision Framework: Kernel Driver vs Userspace
+
+| Criterion | Kernel Driver | Userspace Access |
+|-----------|---------------|------------------|
+| **Interrupt handling** | Required — only kernel can register IRQ handlers | Not possible (polling only) |
+| **Latency requirements** | Microsecond-level response | Millisecond-level acceptable |
+| **Shared device access** | Kernel manages arbitration | Single process at a time |
+| **DMA support** | Full DMA engine access | Not available |
+| **Upstream acceptance** | Required for OpenBMC mainline | Not applicable — stays in your layer |
+| **Development speed** | Slower (compile, deploy, reboot) | Fast (edit, run) |
+| **Debugging** | Kernel oops, printk, ftrace | gdb, printf, strace |
+| **hwmon/D-Bus integration** | Automatic via hwmon subsystem | Manual — must write your own bridge |
+
+{: .note }
+If your device needs to appear as a standard hwmon sensor on D-Bus (for dbus-sensors/entity-manager integration), you almost always need a kernel driver. Userspace approaches are best for prototyping, diagnostics, and one-off access.
+
+### libgpiod — GPIO Access
+
+libgpiod v2 is the recommended way to access GPIO lines from userspace. It replaces the deprecated sysfs GPIO interface (`/sys/class/gpio/`).
+
+**Command-line tools:**
+
+```bash
+# List all GPIO chips
+gpiodetect
+
+# Show lines on a specific chip
+gpioinfo gpiochip0
+
+# Read a GPIO line value
+gpioget gpiochip0 42
+
+# Set a GPIO line (active-high)
+gpioset gpiochip0 42=1
+
+# Monitor a line for events (rising/falling edge)
+gpiomon gpiochip0 42
+```
+
+**C API snippet:**
+
+```c
+#include <gpiod.h>
+
+struct gpiod_chip *chip = gpiod_chip_open("/dev/gpiochip0");
+struct gpiod_line_settings *settings = gpiod_line_settings_new();
+gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_INPUT);
+
+struct gpiod_line_config *config = gpiod_line_config_new();
+static const unsigned int offset = 42;
+gpiod_line_config_add_line_settings(config, &offset, 1, settings);
+
+struct gpiod_line_request *request =
+    gpiod_chip_request_lines(chip, NULL, config);
+
+enum gpiod_line_value value =
+    gpiod_line_request_get_value(request, offset);
+
+gpiod_line_request_release(request);
+gpiod_line_config_free(config);
+gpiod_line_settings_free(settings);
+gpiod_chip_close(chip);
+```
+
+{: .tip }
+OpenBMC uses libgpiod extensively in `phosphor-gpio-monitor` and `phosphor-buttons`. See the [GPIO Management Guide]({% link docs/03-core-services/14-gpio-management-guide.md %}) for the full OpenBMC GPIO architecture.
+
+### i2c-dev / i2c-tools — Direct I2C Access
+
+The `i2c-dev` kernel module exposes I2C buses as `/dev/i2c-N` character devices.
+
+```bash
+# List I2C buses
+i2cdetect -l
+
+# Scan for devices on bus 0
+i2cdetect -y 0
+
+# Read a register (bus 0, device 0x48, register 0x00)
+i2cget -y 0 0x48 0x00 w
+
+# Write a register
+i2cset -y 0 0x48 0x01 0x60 w
+
+# Dump all registers
+i2cdump -y 0 0x48
+```
+
+{: .warning }
+Using `i2c-tools` on a bus where a kernel driver is already bound can cause bus contention and unpredictable behavior. Use `i2cdetect` to check if addresses show `UU` (already claimed by a driver).
+
+### spidev — SPI Userspace Access
+
+The `spidev` driver exposes SPI devices as `/dev/spidevB.C` (bus B, chip-select C).
+
+Device tree binding:
+
+```dts
+&spi1 {
+    status = "okay";
+
+    spidev@0 {
+        compatible = "linux,spidev";
+        reg = <0>;
+        spi-max-frequency = <10000000>;
+    };
+};
+```
+
+```bash
+# Test SPI communication (requires spi-tools package)
+spi-config -d /dev/spidev1.0 -q
+spi-pipe -d /dev/spidev1.0 -s 1000000 < data.bin > response.bin
+```
+
+### UIO — Userspace I/O for Register-Mapped Devices
+
+UIO maps device registers directly into userspace memory, allowing you to write a full driver without kernel code. Useful for FPGA registers or vendor-specific control blocks.
+
+Device tree binding:
+
+```dts
+my-device@1e6e0000 {
+    compatible = "generic-uio";
+    reg = <0x1e6e0000 0x1000>;
+};
+```
+
+Kernel config fragment:
+
+```
+CONFIG_UIO=y
+CONFIG_UIO_PDRV_GENIRQ=y
+```
+
+Userspace access:
+
+```c
+#include <sys/mman.h>
+#include <fcntl.h>
+
+int fd = open("/dev/uio0", O_RDWR);
+void *regs = mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
+uint32_t val = ((volatile uint32_t *)regs)[0];  // Read register 0x00
+((volatile uint32_t *)regs)[1] = 0xDEADBEEF;    // Write register 0x04
+
+munmap(regs, 0x1000);
+close(fd);
+```
+
+### /dev/mem and devmem2 — Direct Physical Memory Access
+
+For quick register checks during debugging, `devmem2` reads and writes physical addresses directly.
+
+```bash
+# Read SCU register on AST2600 (Silicon Revision)
+devmem2 0x1e6e2004 w
+
+# Write a register
+devmem2 0x1e6e2000 w 0x1688A8A8
+```
+
+{: .warning }
+`/dev/mem` access bypasses all kernel protections. A wrong write can corrupt memory, hang the SoC, or brick the BMC. Use only for debugging on development systems. Production firmware should disable `/dev/mem` access (`CONFIG_STRICT_DEVMEM=y`).
+
+---
+
+## Driver Debugging
+
+Debugging kernel drivers on a BMC is constrained: limited flash storage rules out large trace buffers, there is typically no JTAG/kgdb access, and the BMC may be the only management interface to the system. These techniques work within those constraints.
+
+### dynamic_debug — Runtime Debug Prints
+
+The `dynamic_debug` facility lets you enable `dev_dbg()` and `pr_debug()` messages at runtime without rebuilding the kernel. This is the single most useful driver debugging tool on a BMC.
+
+**Enable for a specific module:**
+
+```bash
+# Enable all debug prints in the lm75 driver
+echo "module lm75 +p" > /sys/kernel/debug/dynamic_debug/control
+
+# Enable for a specific file
+echo "file drivers/hwmon/lm75.c +p" > /sys/kernel/debug/dynamic_debug/control
+
+# Enable for a specific function
+echo "func lm75_probe +p" > /sys/kernel/debug/dynamic_debug/control
+
+# Include function name and line number in output
+echo "module lm75 +pflm" > /sys/kernel/debug/dynamic_debug/control
+```
+
+**Flags:** `p` = print, `f` = function name, `l` = line number, `m` = module name, `t` = thread ID
+
+**View output:**
+
+```bash
+dmesg -w  # Follow kernel log in real time
+```
+
+**Kernel config required:**
+
+```
+CONFIG_DYNAMIC_DEBUG=y
+```
+
+{: .tip }
+To enable debug messages early in boot (before userspace is up), add `dyndbg="module lm75 +p"` to the kernel command line in U-Boot or the device tree `chosen` node.
+
+### ftrace — Probe Sequence Tracing
+
+Use `ftrace` with the `function_graph` tracer to visualize the call chain during driver probe — invaluable for understanding why a probe fails or hangs.
+
+```bash
+# Enable function_graph tracer
+echo function_graph > /sys/kernel/debug/tracing/current_tracer
+
+# Filter to your driver's functions
+echo "lm75_*" > /sys/kernel/debug/tracing/set_ftrace_filter
+
+# Or trace the entire I2C subsystem
+echo "i2c_*" >> /sys/kernel/debug/tracing/set_ftrace_filter
+
+# Start tracing
+echo 1 > /sys/kernel/debug/tracing/tracing_on
+
+# Trigger a probe (rebind the driver)
+echo "0-0048" > /sys/bus/i2c/drivers/lm75/unbind
+echo "0-0048" > /sys/bus/i2c/drivers/lm75/bind
+
+# Stop and read the trace
+echo 0 > /sys/kernel/debug/tracing/tracing_on
+cat /sys/kernel/debug/tracing/trace
+```
+
+**Example output:**
+
+```
+ 1)               |  lm75_probe() {
+ 1)   0.834 us    |    devm_regmap_init_i2c();
+ 1)   0.417 us    |    regmap_read();
+ 1)               |    devm_hwmon_device_register_with_info() {
+ 1)   1.250 us    |      hwmon_device_register_with_info();
+ 1)   1.667 us    |    }
+ 1)   4.584 us    |  }
+```
+
+{: .note }
+On memory-constrained BMCs, reduce the trace buffer: `echo 512 > /sys/kernel/debug/tracing/buffer_size_kb` (default is often 1408 KB per CPU).
+
+### debugfs Interfaces
+
+Several kernel subsystems expose debugging information through debugfs:
+
+**GPIO state:**
+
+```bash
+cat /sys/kernel/debug/gpio
+# Shows all registered GPIO chips, claimed lines, direction, and value
+```
+
+**I2C bus information:**
+
+```bash
+# If CONFIG_I2C_DEBUG_CORE is enabled
+ls /sys/kernel/debug/i2c/
+```
+
+**Regmap register dumps:**
+
+```bash
+# If your driver uses regmap, its registers are exposed automatically
+cat /sys/kernel/debug/regmap/0-0048/registers
+```
+
+**Clock tree (useful for SoC debugging):**
+
+```bash
+cat /sys/kernel/debug/clk/clk_summary
+```
+
+### dmesg Patterns for Common Probe Failures
+
+When a driver fails to probe, `dmesg` contains the clues. Here are the patterns to look for:
+
+**Missing device tree node:**
+
+```
+# No output at all for your driver — it was never matched
+# Check: does your DTS node have the right compatible string?
+cat /proc/device-tree/soc/apb/bus@1e78a000/i2c-bus@100/temperature-sensor@48/compatible
+```
+
+**Wrong compatible string:**
+
+```
+# Driver loads but never probes — compatible mismatch
+# Compare driver's of_match_table with DTS compatible
+cat /sys/bus/i2c/drivers/lm75/module/drivers
+```
+
+**Deferred probe:**
+
+```
+lm75 0-0048: probe deferral - supplier not ready
+# A dependency (regulator, clock, GPIO) isn't available yet
+# Check: cat /sys/kernel/debug/devices_deferred
+```
+
+**I2C communication failure:**
+
+```
+lm75 0-0048: Failed to read register 0x00: -6
+# -6 = ENXIO (no device at that address)
+# Verify with: i2cdetect -y 0
+```
+
+**Missing kernel config:**
+
+```
+# modprobe: FATAL: Module lm75 not found
+# Check: zcat /proc/config.gz | grep LM75
+```
+
+---
+
+## I2C/SPI Sensor Binding Walkthrough
+
+This end-to-end walkthrough traces the full path for adding an I2C hwmon sensor to an OpenBMC system, from device tree to Redfish visibility. We use the **TI TMP175** temperature sensor as the running example — it is supported by the `lm75` kernel driver and works in QEMU.
+
+```
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌───────────────┐    ┌─────────────┐    ┌─────────┐
+│ Device   │───>│ Kernel   │───>│ hwmon    │───>│ Entity        │───>│ dbus-       │───>│ Redfish │
+│ Tree     │    │ Driver   │    │ sysfs    │    │ Manager       │    │ sensors     │    │         │
+│ Node     │    │ Binding  │    │ Interface│    │ JSON Config   │    │ D-Bus Expose│    │ Sensor  │
+└──────────┘    └──────────┘    └──────────┘    └───────────────┘    └─────────────┘    └─────────┘
+```
+
+### Step 1: Device Tree Node
+
+Add the sensor to your platform's device tree on the appropriate I2C bus:
+
+```dts
+&i2c0 {
+    status = "okay";
+
+    temperature-sensor@48 {
+        compatible = "ti,tmp175";
+        reg = <0x48>;
+    };
+};
+```
+
+Key fields:
+- **`compatible`**: Must match a string in the kernel driver's `of_device_id` table. For TMP175, the `lm75` driver matches `"ti,tmp175"`.
+- **`reg`**: The 7-bit I2C address. TMP175 defaults to `0x48` (A0=A1=A2=GND).
+- **Node name**: Convention is `<function>@<addr>`, e.g., `temperature-sensor@48`.
+
+### Step 2: Kernel Driver Binding
+
+The kernel's I2C subsystem matches the DTS `compatible` string against registered drivers. For TMP175:
+
+```
+Driver: drivers/hwmon/lm75.c
+Compatible table entry: { .compatible = "ti,tmp175", .data = &tmp175 }
+```
+
+At boot, when the I2C bus is initialized, the kernel:
+1. Parses the DTS node and creates an `i2c_client` for address `0x48`
+2. Matches `"ti,tmp175"` to the `lm75` driver
+3. Calls `lm75_probe()`, which reads chip ID registers and creates an hwmon device
+
+Verify binding succeeded:
+
+```bash
+# Check driver bound to device
+ls -la /sys/bus/i2c/devices/0-0048/driver
+# Should show: ... -> ../../../bus/i2c/drivers/lm75
+
+# Check dmesg for probe
+dmesg | grep lm75
+# lm75 0-0048: hwmon0: sensor 'tmp175'
+```
+
+### Step 3: hwmon sysfs Verification
+
+Once the driver probes successfully, it exposes temperature readings through the hwmon sysfs interface:
+
+```bash
+# Find the hwmon device
+ls /sys/class/hwmon/
+# hwmon0
+
+# Check which driver owns it
+cat /sys/class/hwmon/hwmon0/name
+# tmp175
+
+# Read temperature (in millidegrees Celsius)
+cat /sys/class/hwmon/hwmon0/temp1_input
+# 25000  (= 25.0°C)
+
+# Read all attributes
+ls /sys/class/hwmon/hwmon0/
+# name  temp1_input  temp1_max  temp1_max_hyst  ...
+```
+
+{: .note }
+The `temp1_input` value is in millidegrees Celsius. Divide by 1000 for the human-readable temperature (25000 = 25.0°C).
+
+### Step 4: Entity-Manager JSON Configuration
+
+Entity-manager discovers hardware based on JSON configuration files. Create an entry for your platform that describes the sensor:
+
+```json
+{
+    "Exposes": [
+        {
+            "Name": "Baseboard Temp",
+            "Type": "TMP175",
+            "Bus": 0,
+            "Address": "0x48"
+        }
+    ],
+    "Name": "My Platform Baseboard",
+    "Probe": "TRUE"
+}
+```
+
+Place this JSON in your meta-layer's entity-manager configurations directory:
+
+```
+meta-vendor/meta-platform/
+  recipes-phosphor/configuration/
+    entity-manager/
+      my-platform-baseboard.json
+```
+
+See the [Entity Manager Guide]({% link docs/03-core-services/03-entity-manager-guide.md %}) for advanced probe expressions and configuration patterns.
+
+### Step 5: dbus-sensors Pickup and D-Bus Exposure
+
+The `dbus-sensors` package includes `hwmontempsensor`, which monitors entity-manager for matching configurations and exposes hwmon readings on D-Bus.
+
+Once entity-manager publishes the configuration, `hwmontempsensor` automatically:
+1. Matches the `Type` field to its supported sensor types
+2. Opens the corresponding `/sys/class/hwmon/` sysfs path
+3. Creates a D-Bus object at `/xyz/openbmc_project/sensors/temperature/Baseboard_Temp`
+4. Polls the sysfs value and updates the D-Bus property
+
+Verify on D-Bus:
+
+```bash
+# List temperature sensors
+busctl tree xyz.openbmc_project.HwmonTempSensor
+
+# Read the sensor value
+busctl get-property xyz.openbmc_project.HwmonTempSensor \
+    /xyz/openbmc_project/sensors/temperature/Baseboard_Temp \
+    xyz.openbmc_project.Sensor.Value Value
+# d 25.0
+```
+
+See the [D-Bus Sensors Guide]({% link docs/03-core-services/01-dbus-sensors-guide.md %}) and [hwmon Sensors Guide]({% link docs/03-core-services/02-hwmon-sensors-guide.md %}) for sensor types and thresholds.
+
+### Step 6: Redfish Sensor Visibility
+
+BMCWeb exposes D-Bus sensor objects as Redfish Sensor resources automatically:
+
+```bash
+# Query chassis sensors
+curl -k -u root:0penBmc \
+    https://localhost:2443/redfish/v1/Chassis/chassis/Sensors/temperature_Baseboard_Temp
+```
+
+Expected response (excerpt):
+
+```json
+{
+    "@odata.id": "/redfish/v1/Chassis/chassis/Sensors/temperature_Baseboard_Temp",
+    "Name": "Baseboard Temp",
+    "Reading": 25.0,
+    "ReadingUnits": "Cel",
+    "ReadingType": "Temperature",
+    "Status": {
+        "State": "Enabled",
+        "Health": "OK"
+    }
+}
+```
+
+### Cross-References
+
+For deeper detail on each layer of the stack:
+- [Entity Manager Guide]({% link docs/03-core-services/03-entity-manager-guide.md %}) — JSON probe expressions, multi-board configs
+- [D-Bus Sensors Guide]({% link docs/03-core-services/01-dbus-sensors-guide.md %}) — sensor daemon architecture, threshold configuration
+- [hwmon Sensors Guide]({% link docs/03-core-services/02-hwmon-sensors-guide.md %}) — hwmon sysfs attributes, supported chip types
+- [I2C Device Integration Guide]({% link docs/03-core-services/16-i2c-device-integration-guide.md %}) — I2C bus configuration, device troubleshooting
+
+---
+
 ## Upstreaming Best Practices
 
 ### OpenBMC Upstream-First Policy
@@ -706,6 +1353,13 @@ git push gerrit HEAD:refs/for/dev-6.18
 | Clean up workspace | `devtool reset linux-aspeed` |
 | Force re-patch | `bitbake linux-aspeed -c patch -f` |
 | Full rebuild from scratch | `bitbake linux-aspeed -c cleansstate && bitbake linux-aspeed` |
+| Build out-of-tree module | `bitbake my-hwmon-module` |
+| Enable dynamic debug for module | `echo "module lm75 +p" > /sys/kernel/debug/dynamic_debug/control` |
+| Start ftrace function_graph | `echo function_graph > /sys/kernel/debug/tracing/current_tracer` |
+| Check GPIO state via debugfs | `cat /sys/kernel/debug/gpio` |
+| Scan I2C bus | `i2cdetect -y 0` |
+| Read I2C register | `i2cget -y 0 0x48 0x00 w` |
+| Check deferred probes | `cat /sys/kernel/debug/devices_deferred` |
 
 ### Patch Workflow Summary
 
@@ -746,3 +1400,8 @@ git push gerrit HEAD:refs/for/dev-6.18
 - [Yocto devtool Reference](https://docs.yoctoproject.org/ref-manual/devtool-reference.html) — complete devtool command reference
 - [Linux Kernel Submitting Patches](https://www.kernel.org/doc/Documentation/process/submitting-patches.rst) — upstream kernel submission guide
 - [OpenBMC Linux Kernel Repository](https://github.com/openbmc/linux) — kernel source tree
+- [Yocto module.bbclass](https://docs.yoctoproject.org/ref-manual/classes.html#module) — out-of-tree kernel module recipe class
+- [libgpiod Documentation](https://libgpiod.readthedocs.io/) — userspace GPIO access library (v2 API)
+- [Linux UIO Documentation](https://www.kernel.org/doc/html/latest/driver-api/uio-howto.html) — Userspace I/O framework
+- [Linux ftrace Documentation](https://www.kernel.org/doc/html/latest/trace/ftrace.html) — function tracer and function_graph tracer
+- [Linux dynamic_debug](https://www.kernel.org/doc/html/latest/admin-guide/dynamic-debug-howto.html) — runtime debug print control
