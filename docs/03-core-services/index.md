@@ -24,6 +24,7 @@ Master the essential services that make up an OpenBMC system.
 - Hardware inventory and FRU data
 - Watchdog timer configuration
 - Button handling (power, reset)
+- Physical-security and intrusion detection (chassis switch, BMC tamper input, battery-removal)
 
 ## Service Categories
 
@@ -66,6 +67,14 @@ Essential services for system operation.
 | [Watchdog]({% link docs/03-core-services/12-watchdog-guide.md %}) | Host watchdog timer |
 | [Buttons]({% link docs/03-core-services/13-buttons-guide.md %}) | Power/reset buttons |
 | [LDAP Integration]({% link docs/03-core-services/18-ldap-integration-guide.md %}) | LDAP/Active Directory authentication |
+
+### Physical Security
+
+Detect chassis tampering and protect against unauthorized hardware access.
+
+| Guide | Description |
+|-------|-------------|
+| [Intrusion Detection]({% link docs/03-core-services/20-intrusion-detection-guide.md %}) | Chassis switch, BMC tamper input, battery-backed latch, VBAT-SRAM token |
 
 ## Prerequisites
 
