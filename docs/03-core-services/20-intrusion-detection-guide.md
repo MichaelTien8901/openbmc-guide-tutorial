@@ -59,8 +59,8 @@ flowchart LR
 
     subgraph Kernel["Linux Kernel"]
         direction TB
-        GPIO["gpio-aspeed /<br/>npcm gpio"]
-        RTC["rtc-aspeed /<br/>npcm-rtc<br/>(nvmem)"]
+        GPIO["gpio-aspeed or<br/>npcm-gpio"]
+        RTC["rtc-aspeed or<br/>npcm-rtc<br/>(nvmem)"]
     end
 
     subgraph Userspace["OpenBMC Userspace"]
@@ -71,7 +71,7 @@ flowchart LR
 
     DBus["D-Bus<br/>xyz.openbmc_project.Chassis.Intrusion"]
     BMCWEB["bmcweb"]
-    Redfish["Redfish<br/>Chassis/.../PhysicalSecurity<br/>+ LogService.EventLog"]
+    Redfish["Redfish<br/>PhysicalSecurity<br/>and LogService EventLog"]
     IPMI["phosphor-ipmi-host<br/>(OEM SEL)"]
 
     Switch --> GPIO
@@ -95,14 +95,14 @@ The companion reporter (`intrusion-battery-reporter`) is a small service this gu
 ```mermaid
 flowchart TB
     Start(["Reporter<br/>start"])
-    ReadLatch{{"Read latch<br/>Q GPIO"}}
+    ReadLatch["Read latch<br/>Q GPIO"]
     ClearLatch["Pulse latch<br/>R GPIO"]
-    VerifyToken{{"Read VBAT<br/>token, verify<br/>HMAC seal"}}
-    RotateToken["Write fresh<br/>random token<br/>+ new HMAC"]
+    VerifyToken["Read VBAT token<br/>verify HMAC seal"]
+    RotateToken["Write fresh<br/>random token<br/>and new HMAC"]
     SubLive["Subscribe to<br/>comparator GPIO<br/>edge events"]
-    LogTamper["Log<br/>TamperingDetected<br/>+ OEM SEL"]
-    LogBatt["Log battery-removed<br/>+ OEM SEL<br/>(source = vbat-token)"]
-    LogLive["Log battery-removed<br/>+ OEM SEL<br/>(source = live-comparator)"]
+    LogTamper["Log<br/>TamperingDetected<br/>and OEM SEL"]
+    LogBatt["Log battery-removed<br/>source vbat-token"]
+    LogLive["Log battery-removed<br/>source live-comparator"]
     Loop(["Running"])
 
     Start --> ReadLatch
@@ -111,7 +111,7 @@ flowchart TB
     LogTamper --> ClearLatch
     ClearLatch --> VerifyToken
     VerifyToken -- "match" --> RotateToken
-    VerifyToken -- "mismatch / wiped" --> LogBatt
+    VerifyToken -- "mismatch or wiped" --> LogBatt
     LogBatt --> RotateToken
     RotateToken --> SubLive
     SubLive --> Loop
@@ -439,14 +439,14 @@ flowchart LR
 ```mermaid
 flowchart TB
     Start(["Boot"])
-    ReadQ{{"Read GPIOS5<br/>(latch Q)"}}
-    Asserted{"Q == 1?"}
-    LogTamper["Emit Redfish<br/>TamperingDetected<br/>+ OEM SEL"]
-    ClearR["Drive GPIOS7 = 1<br/>(hold ≥ 1 µs)"]
-    DropR["Drive GPIOS7 = 0"]
-    Reread{{"Re-read Q<br/>before releasing R"}}
-    StillSet{"Q still 1?"}
-    Live["Live intrusion<br/>during clear:<br/>log HardwareIntrusion"]
+    ReadQ["Read GPIOS5<br/>latch Q"]
+    Asserted{"Q asserted?"}
+    LogTamper["Emit Redfish<br/>TamperingDetected<br/>and OEM SEL"]
+    ClearR["Drive GPIOS7 high<br/>hold at least 1 us"]
+    DropR["Drive GPIOS7 low"]
+    Reread["Re-read Q<br/>before releasing R"]
+    StillSet{"Q still asserted?"}
+    Live["Live intrusion<br/>during clear<br/>log HardwareIntrusion"]
     Subscribe["Subscribe live<br/>chassis-intrusion<br/>GPIO edges"]
     Done(["Running"])
 
