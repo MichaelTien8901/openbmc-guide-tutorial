@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: GPL-2.0+
+//
+// AST2500 SGPIO (single controller) — Intel Vegman style host-status fan-in.
+//
+// The sgpio node lives in aspeed-g5.dtsi with status = "disabled"; this fragment
+// enables and sizes it. AST2500 has ONE SGPIO master, up to 80 hardware lines.
+//
+// ngpios = <80> hardware lines -> 160 software GPIOs (even=input, odd=output).
+
+&sgpio {
+	status = "okay";
+	ngpios = <80>;
+	bus-frequency = <2000000>;	/* 2 MHz, as on real Vegman boards */
+
+	gpio-line-names =
+		"CPU1_PRESENCE",       "",
+		"CPU1_THERMTRIP",      "",
+		"CPU1_VRHOT",          "",
+		"CPU1_FIVR_FAULT",     "",
+		"CPU1_MEM_ABCD_VRHOT", "",
+		"CPU1_MEM_EFGH_VRHOT", "";
+		/* ... pad with "" up to 160 names total (2 x ngpios) ... */
+};
+</content>

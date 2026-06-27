@@ -588,6 +588,7 @@ systemctl cat phosphor-multi-gpio-monitor.service
 - [Buttons Guide]({% link docs/03-core-services/13-buttons-guide.md %})
 - [Power Management Guide]({% link docs/03-core-services/05-power-management-guide.md %})
 - [LED Manager Guide]({% link docs/03-core-services/08-led-manager-guide.md %})
+- [SGPIO (Serial GPIO)]({% link docs/05-advanced/22-sgpio-guide.md %}) -- expand signal count over a few shared pins when you run out of parallel GPIO; uses the same `phosphor-multi-gpio-monitor` JSON
 
 ### External Documentation
 - [libgpiod Documentation](https://git.kernel.org/pub/scm/libs/libgpiod/libgpiod.git/about/)

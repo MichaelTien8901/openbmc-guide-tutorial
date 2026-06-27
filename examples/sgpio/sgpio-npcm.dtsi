@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: GPL-2.0+
+//
+// Nuvoton NPCM SGPIO node — host/CPU status fan-in.
+//
+// HARDWARE NOTE: the NPCM silicon is the SIOX (Serial I/O eXpansion) block, NOT
+// an SFF-8485-style SGPIO master like ASPEED. The Linux driver/binding are named
+// "sgpio", but the pin groups are iox1/iox2 (IOX = I/O eXpansion) and the part
+// clocks 74HC595 (out) / 74HC165 (in) shift registers. SIOX is HALF-duplex
+// (8 bits one direction, then 8 bits the other), so effective throughput for a
+// given shift clock is ~half that of full-duplex SGPIO.
+//
+// IMPORTANT — Nuvoton differs from ASPEED:
+//   * Two separate count properties: nuvoton,input-ngpios / nuvoton,output-ngpios
+//     (each <= 64). Total gpiochip lines = output-ngpios + input-ngpios.
+//   * Layout is CONTIGUOUS, OUTPUTS FIRST:
+//       offsets 0 .. (nout-1)            = OUTPUT-only lines
+//       offsets nout .. (nout+nin-1)     = INPUT-only lines  (only these get IRQs)
+//   * NO bus-frequency property — the driver derives the shift clock from APB3
+//     and keeps it < 8 MHz automatically. Do not add bus-frequency (it existed
+//     only in an unmerged early patch and is rejected by the merged binding).
+//   * No pinctrl-0 on the node — mux the SGPIO pins via the iox1/iox2 pin groups.
+//   * There is NO in-tree NPCM DTS node to copy: you author this yourself.
+//
+// Driver: drivers/gpio/gpio-npcm-sgpio.c (mainline >= v6.8; openbmc/linux >= dev-6.6)
+// Enable: CONFIG_GPIO_NPCM_SGPIO=y  (set in meta-nuvoton npcm8xx_defconfig)
+
+// ---- NPCM7xx (authoritative upstream binding example; reg base confirmed) ----
+&apb {
+	sgpio1: gpio@101000 {
+		compatible = "nuvoton,npcm750-sgpio";
+		reg = <0x101000 0x200>;
+		clocks = <&clk NPCM7XX_CLK_APB3>;
+		interrupts = <GIC_SPI 19 IRQ_TYPE_LEVEL_HIGH>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		nuvoton,input-ngpios = <64>;	/* lines 64..127 -> inputs  */
+		nuvoton,output-ngpios = <64>;	/* lines 0..63    -> outputs */
+		gpio-line-names =
+			/* outputs first: offsets 0..63 */
+			"FAULT_LED_DRIVE", "IDENTIFY_LED_DRIVE",
+			/* ... pad outputs with "" up to offset 63 ... */
+			/* inputs next: offsets 64.. */
+			"CPU1_PRESENCE", "CPU1_THERMTRIP", "CPU1_VRHOT",
+			"CPU1_FIVR_FAULT";
+			/* ... pad to output-ngpios + input-ngpios names total ... */
+	};
+};
+
+// ---- NPCM8xx variant: swap compatible + clock macro, confirm the reg base ----
+// &apb {
+//     sgpio1: gpio@<base> {                 // <base>: take from NPCM8xx datasheet /
+//         compatible = "nuvoton,npcm845-sgpio";   // reference DTS (no public node to copy)
+//         reg = <0x<base> 0x200>;
+//         clocks = <&clk NPCM8XX_CLK_APB3>;
+//         interrupts = <GIC_SPI 19 IRQ_TYPE_LEVEL_HIGH>;
+//         gpio-controller;
+//         #gpio-cells = <2>;
+//         nuvoton,input-ngpios = <64>;
+//         nuvoton,output-ngpios = <64>;
+//     };
+// };
+</content>

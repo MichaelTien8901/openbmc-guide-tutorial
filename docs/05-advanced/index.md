@@ -23,6 +23,7 @@ Dive into advanced protocols, security features, logging, and debug capabilities
 - Unit testing with GTest/GMock
 - Integration testing with Robot Framework
 - Linux kernel patching for driver development
+- SGPIO (serial GPIO) for expanding signal count over a few shared pins
 - Multi-host BMC management
 - Performance optimization for constrained BMC environments
 
@@ -93,6 +94,7 @@ Develop and debug Linux kernel drivers for BMC hardware.
 | Guide | Description | Difficulty |
 |-------|-------------|------------|
 | [Linux Kernel Driver Development]({% link docs/05-advanced/12-linux-kernel-driver-development-guide.md %}) | Kernel patching, out-of-tree modules, userspace drivers, debugging, I2C/SPI binding | Advanced |
+| [SGPIO (Serial GPIO)]({% link docs/05-advanced/22-sgpio-guide.md %}) | Serial GPIO master on ASPEED/Nuvoton — device tree, driver, and usage compared with parallel GPIO | Advanced |
 
 ### Multi-Host & Platform Scaling
 

@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: GPL-2.0+
+//
+// AST2600 SGPIO master 0 (SGPM1) — host/CPU status into the BMC.
+//
+// Include or paste into your board DTS (e.g. aspeed-bmc-<vendor>-<platform>.dts).
+// The sgpiom0 node itself lives in aspeed-g6.dtsi with status = "disabled"; this
+// fragment enables and sizes it.
+//
+// ngpios = <128> hardware lines -> 256 software GPIOs.
+//   even offset = input  (read here)
+//   odd  offset = output (drive here)
+// ngpios MUST be a multiple of 8. gpio-line-names must list 2 x ngpios entries.
+
+&sgpiom0 {
+	status = "okay";
+	ngpios = <128>;
+	bus-frequency = <1000000>;	/* 1 MHz; lower for long backplane runs */
+
+	gpio-line-names =
+		/* hw 0  */ "CPU1_PRESENCE",       "",
+		/* hw 1  */ "CPU1_THERMTRIP",      "",
+		/* hw 2  */ "CPU1_VRHOT",          "",
+		/* hw 3  */ "CPU1_FIVR_FAULT",     "",
+		/* hw 4  */ "CPU1_MEM_ABCD_VRHOT", "",
+		/* hw 5  */ "CPU1_MEM_EFGH_VRHOT", "",
+		/* hw 6  */ "CPU2_PRESENCE",       "",
+		/* hw 7  */ "CPU2_THERMTRIP",      "",
+		/* hw 8  */ "CPU2_VRHOT",          "",
+		/* hw 9  */ "CPU2_FIVR_FAULT",     "",
+		/* hw 10 */ "",                    "FAULT_LED_DRIVE",
+		/* hw 11 */ "",                    "IDENTIFY_LED_DRIVE";
+		/* ... pad with "" up to 256 names total (2 x ngpios) ... */
+};
+</content>

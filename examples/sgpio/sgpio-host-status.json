@@ -1,0 +1,40 @@
+{
+    "_comment": "phosphor-multi-gpio-monitor config for host status arriving over SGPIO. SGPIO lines are ordinary named gpiochip lines, so this is identical to a parallel-GPIO config -- LineName points at an SGPIO input (even) line name from gpio-line-names.",
+    "GpioConfigs": [
+        {
+            "Name": "Cpu1Thermtrip",
+            "LineName": "CPU1_THERMTRIP",
+            "GpioNum": 0,
+            "ChipId": "",
+            "EventMon": "FALLING",
+            "Targets": {
+                "0": ["log-cpu-thermtrip@0.target"]
+            },
+            "Continue": true
+        },
+        {
+            "Name": "Cpu1Vrhot",
+            "LineName": "CPU1_VRHOT",
+            "GpioNum": 0,
+            "ChipId": "",
+            "EventMon": "FALLING",
+            "Targets": {
+                "0": ["log-cpu-vrhot@0.target"]
+            },
+            "Continue": true
+        },
+        {
+            "Name": "Cpu1Presence",
+            "LineName": "CPU1_PRESENCE",
+            "GpioNum": 0,
+            "ChipId": "",
+            "EventMon": "BOTH",
+            "Targets": {
+                "0": ["cpu1-absent@0.target"],
+                "1": ["cpu1-present@0.target"]
+            },
+            "Continue": true
+        }
+    ]
+}
+</content>
