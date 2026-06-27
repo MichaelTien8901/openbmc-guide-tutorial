@@ -463,7 +463,7 @@ cat /sys/bus/i2c/devices/0-0048/hwmon/hwmon*/temp1_input  # Read temperature
 echo 0x48 > /sys/bus/i2c/devices/i2c-0/delete_device     # Remove device
 ```
 
-See additional working examples in the [examples/i2c-tools/]({{ site.baseurl }}/examples/i2c-tools/) directory.
+See additional working examples in the [examples/i2c-tools/]({{ site.baseurl }}/docs/examples/i2c-tools/README.md) directory.
 
 ---
 

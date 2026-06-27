@@ -944,7 +944,7 @@ echo "=== Filesystem Space Check ==="
 echo "Compare sizes against partition limits in your machine.conf"
 ```
 
-See the complete example at [examples/flash-layout/]({{ site.baseurl }}/examples/flash-layout/).
+See the complete example at [examples/flash-layout/]({{ site.baseurl }}/docs/examples/flash-layout/README.md).
 
 ### Example 2: Custom Flash Layout Configuration
 

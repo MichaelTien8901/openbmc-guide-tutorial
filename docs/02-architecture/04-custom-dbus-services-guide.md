@@ -1039,7 +1039,7 @@ busctl --system call xyz.openbmc_project.Example.Greeter \
     SayHello s "Docker"
 ```
 
-See the complete example at [examples/custom-dbus-service/]({{ site.baseurl }}/examples/custom-dbus-service/).
+See the complete example at [examples/custom-dbus-service/]({{ site.baseurl }}/docs/examples/custom-dbus-service/README.md).
 
 ---
 

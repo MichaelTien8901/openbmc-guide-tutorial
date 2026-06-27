@@ -501,7 +501,7 @@ If your device tree does not define `gpio-line-names`, you can fall back to spec
 {: .warning }
 Using `GpioNum` ties your configuration to a specific kernel GPIO numbering scheme. If the device tree changes or a driver is added that shifts GPIO offsets, your configuration breaks. Always prefer `LineName` when possible.
 
-See additional working examples in the [examples/gpio-monitor/]({{ site.baseurl }}/examples/gpio-monitor/) directory.
+See additional working examples in the [examples/gpio-monitor/]({{ site.baseurl }}/docs/examples/gpio-monitor/README.md) directory.
 
 ---
 

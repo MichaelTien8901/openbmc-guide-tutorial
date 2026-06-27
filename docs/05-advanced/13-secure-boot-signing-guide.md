@@ -733,7 +733,7 @@ echo "Development keys and OTP config generated in ${KEY_DIR}/"
 echo "WARNING: These are DEVELOPMENT keys. Never use them for production."
 ```
 
-See the complete example at [examples/secure-boot/]({{ site.baseurl }}/examples/secure-boot/).
+See the complete example at [examples/secure-boot/]({{ site.baseurl }}/docs/examples/secure-boot/README.md).
 
 ### Example 2: Build-Time Signing Verification Script
 

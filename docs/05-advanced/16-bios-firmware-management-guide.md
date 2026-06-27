@@ -332,7 +332,7 @@ Define your platform's BIOS attributes in a JSON file that `biosconfig_manager` 
 }
 ```
 
-See the complete example at [examples/bios-config/]({{ site.baseurl }}/examples/bios-config/).
+See the complete example at [examples/bios-config/]({{ site.baseurl }}/docs/examples/bios-config/README.md).
 
 ---
 

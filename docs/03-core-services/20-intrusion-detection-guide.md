@@ -592,7 +592,7 @@ A naive magic constant (e.g., `0xDEADBEEF` repeated) would be trivial for an att
 
 ## Companion Reporter Service
 
-The `intrusion-battery-reporter` service glues together the latch, the live comparator, and the VBAT-SRAM token into a single small daemon. Full source is in [`examples/intrusion-detection/src/intrusion-battery-reporter.cpp`]({{ site.baseurl }}/examples/intrusion-detection/src/intrusion-battery-reporter.cpp). A condensed view of the core loop:
+The `intrusion-battery-reporter` service glues together the latch, the live comparator, and the VBAT-SRAM token into a single small daemon. Full source is in [`examples/intrusion-detection/src/intrusion-battery-reporter.cpp`]({{ site.baseurl }}/docs/examples/intrusion-detection/src/intrusion-battery-reporter.cpp). A condensed view of the core loop:
 
 ```cpp
 // intrusion-battery-reporter.cpp (excerpt — full source in examples/)
@@ -646,7 +646,7 @@ int main()
 ### Meson Build Fragment
 
 ```meson
-# meson.build (in examples/intrusion-detection/src/)
+# meson.build (in docs/examples/intrusion-detection/src/)
 project('intrusion-battery-reporter', 'cpp',
         version: '0.1',
         default_options: ['cpp_std=c++20'])

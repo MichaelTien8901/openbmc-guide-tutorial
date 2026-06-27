@@ -580,7 +580,7 @@ if __name__ == "__main__":
             print(f"  {name}: {status}")
 ```
 
-See additional examples in the [examples/peci/]({{ site.baseurl }}/examples/peci/) directory.
+See additional examples in the [examples/peci/]({{ site.baseurl }}/docs/examples/peci/README.md) directory.
 
 ---
 
