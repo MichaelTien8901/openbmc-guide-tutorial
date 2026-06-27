@@ -340,9 +340,11 @@ A ready-to-use Dev Container configuration provides a complete OpenBMC build env
 git clone https://github.com/openbmc/openbmc.git
 cd openbmc
 
-# 2. Add the devcontainer configuration
-#    Copy from the tutorial examples, or download directly:
-cp -r /path/to/openbmc-guide-tutorial/examples/devcontainer .devcontainer
+# 2. Add the devcontainer configuration (download from this tutorial site)
+mkdir -p .devcontainer
+base=https://michaeltien8901.github.io/openbmc-guide-tutorial/docs/examples/devcontainer
+curl -fsSL -o .devcontainer/devcontainer.json "$base/devcontainer.json"
+curl -fsSL -o .devcontainer/Dockerfile        "$base/Dockerfile"
 
 # 3. Open in VS Code
 code .
@@ -351,7 +353,7 @@ code .
 Then in VS Code, press **F1** → **Dev Containers: Reopen in Container**. The first build takes several minutes; subsequent opens use cached layers.
 
 {: .tip }
-The `examples/devcontainer/` directory in this tutorial contains the reference `Dockerfile` and `devcontainer.json`. Copy the entire directory into your openbmc clone as `.devcontainer/`.
+The [`docs/examples/devcontainer/`]({{ site.baseurl }}/docs/examples/devcontainer/devcontainer.json) directory in this tutorial holds the reference `Dockerfile` and `devcontainer.json`. The commands above download them into your openbmc clone as `.devcontainer/`; you can also browse them in the [tutorial repo](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/devcontainer).
 
 #### What You Get
 
