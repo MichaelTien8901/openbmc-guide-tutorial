@@ -3,7 +3,7 @@
 Reference device tree fragments, a `phosphor-multi-gpio-monitor` configuration, and a
 libgpiod reader for the ASPEED (and Nuvoton NPCM) serial GPIO controllers.
 
-See the [SGPIO (Serial GPIO) guide](../../docs/05-advanced/22-sgpio-guide.md) for the
+See the [SGPIO (Serial GPIO) guide](../../05-advanced/22-sgpio-guide.md) for the
 full walkthrough.
 
 > **Requires an OpenBMC environment + real hardware** -- the SGPIO controller registers

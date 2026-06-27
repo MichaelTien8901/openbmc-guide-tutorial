@@ -458,7 +458,7 @@ sgpio1: gpio@<base> {
 {: .warning }
 The NPCM8xx register base is intentionally left as `<base>` above: no public in-tree NPCM8xx SGPIO node exists to copy a verified address from. Take the base (and the second module's address) from the NPCM8xx datasheet or your platform's reference device tree. The NPCM7xx module 1 base `0x101000` (size `0x200`) is the only address confirmed from upstream.
 
-Both fragments, with the outputs-first `gpio-line-names` layout filled in, are in [`examples/sgpio/sgpio-npcm.dtsi`]({{ site.baseurl }}/examples/sgpio/sgpio-npcm.dtsi).
+Both fragments, with the outputs-first `gpio-line-names` layout filled in, are in [`docs/examples/sgpio/sgpio-npcm.dtsi`]({{ site.baseurl }}/docs/examples/sgpio/sgpio-npcm.dtsi).
 
 ### Pinmux
 
@@ -591,7 +591,7 @@ int main(void)
 
 ### Example 4: phosphor-multi-gpio-monitor for Host Status
 
-See the inline [monitoring example](#monitoring-with-phosphor-multi-gpio-monitor) above and the working configs in the [examples/sgpio/]({{ site.baseurl }}/examples/sgpio/) directory.
+See the inline [monitoring example](#monitoring-with-phosphor-multi-gpio-monitor) above and the working config in [`docs/examples/sgpio/sgpio-host-status.json`]({{ site.baseurl }}/docs/examples/sgpio/sgpio-host-status.json), alongside the other fragments under [`docs/examples/sgpio/`]({{ site.baseurl }}/docs/examples/sgpio/README.md).
 
 ---
 
