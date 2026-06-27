@@ -144,7 +144,7 @@ OEM schemas document your extensions and enable automated validation.
 ### JSON Schema
 
 {: .note }
-> **Source Reference**: The example schema follows the pattern from the [examples/redfish/oem-schema.json](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/redfish) file in this repository.
+> **Source Reference**: The example schema follows the pattern from the [examples/redfish/oem-schema.json](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/redfish) file in this repository.
 
 ```json
 {
@@ -599,7 +599,7 @@ journalctl -u bmcweb -f
 
 ## Examples
 
-Working examples are available in the [examples/redfish](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/redfish) directory:
+Working examples are available in the [examples/redfish](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/redfish) directory:
 
 - `oem_resource.hpp` -- Complete OEM handler with root, BoardInfo, DiagnosticService, and RunTest action
 - `oem-schema.json` -- JSON Schema for the OEM BoardInfo resource

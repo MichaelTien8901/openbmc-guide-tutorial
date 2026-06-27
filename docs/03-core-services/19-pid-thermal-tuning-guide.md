@@ -540,14 +540,14 @@ busctl get-property xyz.openbmc_project.HwmonTempSensor \
 
 ## Code Examples
 
-Working example configurations are available in the [examples/pid-tuning/](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/pid-tuning/) directory:
+Working example configurations are available in the [examples/pid-tuning/](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/pid-tuning/) directory:
 
 - `tuning-baseline-config.json` -- Conservative starting configuration for a single zone
 - `tuning-final-config.json` -- Tuned configuration after iterative adjustment
 - `stepwise-inlet-config.json` -- Stepwise configuration for inlet temperature
 - `multi-sensor-zone-config.json` -- Multi-sensor zone with PID and stepwise combined
 
-Also see the [examples/fan-control/](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/fan-control/) directory for complete zone and entity manager configurations.
+Also see the [examples/fan-control/](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/fan-control/) directory for complete zone and entity manager configurations.
 
 ---
 

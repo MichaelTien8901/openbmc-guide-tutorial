@@ -459,7 +459,7 @@ This is usually normal behavior. Most BIOS implementations stop writing to port 
 
 ## Examples
 
-Working examples are available in the [examples/post-code](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/post-code) directory:
+Working examples are available in the [examples/post-code](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/post-code) directory:
 
 - `read-postcode.sh` - Read current and historical POST codes via D-Bus
 - `monitor-boot.sh` - Monitor POST codes and boot progress in real time

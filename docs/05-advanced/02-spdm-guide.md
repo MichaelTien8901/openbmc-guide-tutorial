@@ -1281,7 +1281,7 @@ systemctl disable spdmd
 
 ## Examples
 
-Working examples are available in the [examples/spdm](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/spdm) directory:
+Working examples are available in the [examples/spdm](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/spdm) directory:
 
 - `spdm_cert_setup.sh` - Generate test certificate chain (Root CA / Intermediate / BMC)
 - `spdm_auth.sh` - Full SPDM authentication flow (version, capabilities, certs, challenge)

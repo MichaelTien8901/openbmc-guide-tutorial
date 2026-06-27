@@ -992,7 +992,7 @@ Key implementation files:
 
 ## Examples
 
-Working examples are available in the [examples/power](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/power) directory:
+Working examples are available in the [examples/power](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/power) directory:
 
 - `power-config.json` - Power configuration
 - `regulators-config.json` - Voltage regulator configuration

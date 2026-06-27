@@ -384,7 +384,7 @@ phosphor-pid-control supports two ways to load its configuration:
 
 ### Direct JSON
 
-Place a `config.json` in `/usr/share/swampd/` (see [zone-config.json](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/fan-control/zone-config.json) for a complete example). This file defines sensors, zones, and PIDs in a single flat structure.
+Place a `config.json` in `/usr/share/swampd/` (see [zone-config.json](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/fan-control/zone-config.json) for a complete example). This file defines sensors, zones, and PIDs in a single flat structure.
 
 The direct JSON format includes `sensors` (D-Bus paths for temperature and fan tach), `zones`, and `pid` arrays. phosphor-pid-control reads this file at startup.
 
@@ -461,7 +461,7 @@ The `"Probe"` field tells Entity Manager **when** to activate this configuration
 
 ### Complete Entity Manager Fan Config
 
-A single JSON file defines the zone, thermal PIDs, and fan PIDs together. See [entity-manager-fan.json](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/fan-control/entity-manager-fan.json) for the full working example.
+A single JSON file defines the zone, thermal PIDs, and fan PIDs together. See [entity-manager-fan.json](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/fan-control/entity-manager-fan.json) for the full working example.
 
 The key `Exposes` entries:
 
@@ -989,7 +989,7 @@ Key implementation files in [phosphor-pid-control](https://github.com/openbmc/ph
 
 ## Examples
 
-Working examples are available in the [examples/fan-control](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/fan-control) directory:
+Working examples are available in the [examples/fan-control](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/fan-control) directory:
 
 - `zone-config.json` - Basic zone configuration
 - `multi-zone-config.json` - Multi-zone setup

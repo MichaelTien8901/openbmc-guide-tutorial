@@ -694,7 +694,7 @@ ldapsearch -x -H "${LDAP_SERVER}" \
     "(uid=${TEST_USER})" memberOf 2>&1
 ```
 
-See the complete examples at [examples/ldap/](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/ldap/).
+See the complete examples at [examples/ldap/](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/ldap/).
 
 ---
 

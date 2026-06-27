@@ -518,7 +518,7 @@ curl -k -u root:0penBmc \
 
 ## Code Examples
 
-Working examples are available in the [examples/psu-pmbus](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/psu-pmbus) directory:
+Working examples are available in the [examples/psu-pmbus](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/psu-pmbus) directory:
 
 - `psu-entity-manager.json` -- Entity Manager configuration for a dual-PSU platform
 - `regulators-config.json` -- phosphor-regulators configuration with VRM rules

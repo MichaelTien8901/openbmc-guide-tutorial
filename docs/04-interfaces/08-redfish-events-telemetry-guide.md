@@ -562,7 +562,7 @@ while true; do
 done
 ```
 
-See the complete examples in the [examples/redfish-events/](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/redfish-events) directory.
+See the complete examples in the [examples/redfish-events/](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/redfish-events) directory.
 
 ---
 

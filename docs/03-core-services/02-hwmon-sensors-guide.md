@@ -715,7 +715,7 @@ dmesg | tail -20
 
 ## Examples
 
-Working examples are available in the [examples/sensors](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/sensors) directory:
+Working examples are available in the [examples/sensors](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/sensors) directory:
 
 - `sensor_reader.cpp` - Read sensor values from D-Bus
 - `virtual-sensor/virtual_sensor.cpp` - Create a virtual sensor on D-Bus

@@ -673,7 +673,7 @@ curl -k -u root:0penBmc \
     https://bmc-ip/redfish/v1/Chassis/chassis1/Thermal
 ```
 
-See working examples in the [examples/multi-host](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/multi-host) directory:
+See working examples in the [examples/multi-host](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/multi-host) directory:
 
 - `monitor-hosts.sh` - Monitor power state across all hosts
 - `ipmb-health-check.sh` - Verify IPMB connectivity to each host

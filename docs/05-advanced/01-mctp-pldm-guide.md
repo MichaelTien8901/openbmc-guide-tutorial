@@ -1393,7 +1393,7 @@ systemctl status pldmd mctpd
 
 ## Examples
 
-Working examples are available in the [examples/mctp-pldm](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/mctp-pldm) directory:
+Working examples are available in the [examples/mctp-pldm](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/mctp-pldm) directory:
 
 - `mctp_health_check.sh` - Verify MCTP/PLDM stack connectivity
 - `pldm_discovery.sh` - Discover and characterize PLDM endpoints

@@ -671,7 +671,7 @@ dreport -d /tmp/debug_test -n test -t user -v
 
 ## Examples
 
-Working examples are available in the [examples/debug-dump](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/master/docs/examples/debug-dump) directory:
+Working examples are available in the [examples/debug-dump](https://github.com/MichaelTien8901/openbmc-guide-tutorial/tree/main/docs/examples/debug-dump) directory:
 
 - `pl_u80_fpga_regs` -- Custom dreport plugin for FPGA register collection
 - `pl_u70_i2c_regulators` -- Custom dreport plugin for I2C voltage regulator state
