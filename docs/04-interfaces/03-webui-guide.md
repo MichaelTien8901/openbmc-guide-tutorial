@@ -26,6 +26,16 @@ Configure and customize the OpenBMC web interface.
 
 **webui-vue** is the modern, Vue.js-based web interface for OpenBMC. It provides a browser-based management console that communicates with the BMC through the Redfish API.
 
+{: .note }
+> **webui-vue replaces phosphor-webui.** The earlier OpenBMC web interface,
+> [phosphor-webui](https://github.com/openbmc/phosphor-webui), was built on
+> AngularJS (now end-of-life) and drove the BMC through the legacy **REST D-Bus
+> API**, which is disabled by default in bmcweb. phosphor-webui is deprecated in
+> favor of webui-vue and is slated to move to read-only. By contrast, **webui-vue
+> is Redfish-only** — it talks exclusively to the Redfish API. If you come across
+> documentation or code referring to phosphor-webui, `ng-app`, or AngularJS
+> controllers, it belongs to that older UI and does not apply here.
+
 ```mermaid
 ---
 title: WebUI Architecture

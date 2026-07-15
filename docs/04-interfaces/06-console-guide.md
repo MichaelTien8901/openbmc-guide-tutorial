@@ -438,6 +438,102 @@ ipmitool -I lanplus -H bmc-ip -U root -P 0penBmc -c 1 sol activate
 
 ---
 
+## Multi-UART Muxing
+
+Unlike [Multiple Host Consoles](#multiple-host-consoles) -- which gives each host its own dedicated serial port -- multi-UART muxing shares **one physical port** between several UARTs that sit behind a GPIO mux, exposing only one of them at a time. A single `obmc-console-server` process drives the shared tty and switches the mux GPIOs to select the active console.
+
+{: .note }
+Use **Multiple Host Consoles** when each host has independent wiring; use **Multi-UART Muxing** when several UARTs share the same BMC port and a mux chip selects between them.
+
+### Mux Configuration
+
+Two configuration keys control muxing (see the upstream [mux-support.md](https://github.com/openbmc/obmc-console/blob/master/docs/mux-support.md)):
+
+- **`mux-gpios`** (global, top of the config file) -- the GPIO line name(s) that drive the mux. The order of the listed GPIOs forms the LSB-first bit representation of the number taken from each console's `mux-index`.
+- **`mux-index`** (per console) -- the numeric mux value that selects this console. Each console lives in a section whose name matches its `console-id`.
+
+```ini
+# /etc/obmc-console/server.conf  (started as: obmc-console-server --config server.conf /dev/ttyS0)
+
+# Global: GPIO(s) that select which UART is active
+mux-gpios = MUX_CTL
+
+[host1]
+mux-index = 0
+logfile = /var/log/console-host1.log
+
+[host2]
+mux-index = 1
+logfile = /var/log/console-host2.log
+```
+
+### Per-Console D-Bus Interface
+
+Each muxed console is published as its own D-Bus service named after the console-id:
+
+```bash
+busctl list | grep xyz.openbmc_project.Console
+# xyz.openbmc_project.Console.host1  ...  obmc-console-server  root ...
+# xyz.openbmc_project.Console.host2  ...  obmc-console-server  root ...
+
+busctl introspect xyz.openbmc_project.Console.host1 \
+    /xyz/openbmc_project/console/host1
+# xyz.openbmc_project.Console.Access  interface  -  -
+# .Connect                            method     -  h
+```
+
+### Mux Switching via Connect()
+
+Mux control is **implicit**: switching happens when a client connects. Calling `Connect()` on a console (or simply attaching `obmc-console-client -i host1`) makes the server switch the mux GPIOs to that console's `mux-index`, then start forwarding bytes. Any client attached to another console is disconnected.
+
+```bash
+# Selecting host1 asserts the mux GPIOs for host1 and drops host2
+busctl call xyz.openbmc_project.Console.host1 \
+    /xyz/openbmc_project/console/host1 \
+    xyz.openbmc_project.Console.Access Connect
+```
+
+Concretely, connecting to `host1` causes the previously active `host2` to (1) stop forwarding bytes and (2) print a disconnect log to its clients; then `host1` (1) switches the mux via the GPIOs, (2) prints a connect log to its clients, and (3) resumes forwarding.
+
+### Connect/Disconnect Log Markers
+
+So a log reader can see why a console went quiet, the server writes a marker line to all clients of a console whenever the mux switches:
+
+```
+[obmc-console] %Y-%m-%d %H:%M:%S UTC CONNECTED
+[obmc-console] %Y-%m-%d %H:%M:%S UTC DISCONNECTED
+```
+
+{: .warning }
+These markers are a convenience only -- anything on the other side of the UART could print the same text, and the exact format is not guaranteed to stay fixed. Do not parse them as a reliable connection signal.
+
+### D-Bus Console Interface
+
+Beyond the muxing `Access` interface, `obmc-console-server` (in `console-dbus.c`) exposes a `xyz.openbmc_project.Console.UART` interface on `/xyz/openbmc_project/console/<console-id>` with a **writable `Baud` property** (type `t`, uint64). Writing it re-applies the tty's termios at runtime -- no service restart needed:
+
+```bash
+# Read the current baud rate
+busctl get-property xyz.openbmc_project.Console.default \
+    /xyz/openbmc_project/console/default \
+    xyz.openbmc_project.Console.UART Baud
+
+# Change baud rate live (re-applies termios on the underlying tty)
+busctl set-property xyz.openbmc_project.Console.default \
+    /xyz/openbmc_project/console/default \
+    xyz.openbmc_project.Console.UART Baud t 57600
+```
+
+The `xyz.openbmc_project.Console.Access` interface's **`Connect()`** method takes no arguments and returns a Unix file descriptor (`h`). The server creates a socket pair, hands the client end back over D-Bus, and closes its own end -- giving the caller a direct byte stream to the console without going through the on-disk Unix socket path.
+
+```bash
+# Returns a connected fd for the default console
+busctl call xyz.openbmc_project.Console.default \
+    /xyz/openbmc_project/console/default \
+    xyz.openbmc_project.Console.Access Connect
+```
+
+---
+
 ## Troubleshooting
 
 ### No Console Output

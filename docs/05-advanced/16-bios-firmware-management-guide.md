@@ -119,6 +119,17 @@ The BMC and host processor share access to the host SPI flash through a hardware
 {: .warning }
 **Never flash BIOS while the host is running.** The host must be powered off before the BMC takes control of the SPI bus. Flashing while the host is active corrupts the running firmware and can damage the flash device.
 
+{: .note }
+The refactored device-updater framework provides a `bios` updater
+(`BIOSSoftwareManager` / `SPIDevice`) configured through the Entity Manager
+interface `xyz.openbmc_project.Configuration.SPIFlash` (keys `SPIControllerIndex`,
+`SPIDeviceIndex`, mux outputs, `Layout`). It powers the host off, binds the
+`spi-aspeed-smc` / `spi-nor` drivers, then writes the image with one of
+`flashrom` (for Intel IFD layouts), `flashcp`, or a flat MTD write, and supports
+a `--dryrun` flag to exercise the flow without touching hardware. See the
+{% link docs/05-advanced/23-device-firmware-update-guide.md %} for the shared
+updater framework. (Verify against your phosphor-bmc-code-mgmt version.)
+
 #### GPIO Mux Configuration
 
 Define the GPIO lines and flash device in your machine layer's device tree:

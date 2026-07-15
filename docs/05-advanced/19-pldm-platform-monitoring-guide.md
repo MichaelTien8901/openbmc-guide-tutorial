@@ -229,6 +229,15 @@ A Numeric Sensor PDR fully describes one numeric sensor:
 | Link State | 18 | Up, Down, Error, Unknown |
 | Boot Progress | 196 | PCI Init, OS Boot, Base Board Init, ... |
 
+{: .tip }
+`pldmtool` groups its subcommands by PLDM type: **base** (`GetPLDMTypes`,
+`GetPLDMVersion`, `GetPLDMCommands`, `GetTID`/`SetTID`), **bios**
+(`GetDateTime`/`SetDateTime`, `GetBIOSTable`, `Get`/`SetBIOSAttributeCurrentValue`),
+**fru** (`GetFruRecordTableMetadata`, `GetFruRecordTable`, `GetFRURecordByOption`),
+**fw_update** (`GetStatus`, `QueryDeviceIdentifiers`, `RequestUpdate`,
+`ActivateFirmware`, …), and **platform** (used below). A **raw** subcommand sends
+arbitrary request bytes for protocol debugging.
+
 ### Querying PDRs with pldmtool
 
 ```bash
@@ -424,6 +433,58 @@ pldmtool platform GetStateEffecterStates -i <effecterID> -m <mctpEID>
 
 Numeric effecters map to D-Bus control interfaces, and state effecters typically map to operational state controls. The `pldmd` platform-mc module creates the appropriate D-Bus objects when effecter PDRs are discovered.
 
+### Driving Remote Effecters from D-Bus
+
+Beyond exposing effecters for external callers, `pldmd` can drive an effecter on a remote terminus automatically in response to a **local D-Bus property change**. The `HostEffecterParser` (in the platform-mc `dbus_to_terminus_effecters` module) reads a JSON map that binds a D-Bus property to a state or numeric effecter. When the watched property changes, `pldmd` issues the matching `SetStateEffecterStates` (0x39) or `SetNumericEffecterValue` (0x31) command to the terminus.
+
+Because many host effecters are only meaningful while the host is up, each entry carries a `checkHostState` flag (default `true`). When set, `pldmd` forwards the effecter write only if the host is in a running-class state (for example `SystemInitComplete`, `OSRunning`, or `SystemSetup`), preventing writes to a powered-off or still-booting host.
+
+```json
+// dbus_to_terminus_effecter.json — bind a D-Bus property to a state effecter
+{
+    "entries": [
+        {
+            "mctp_eid": 9,
+            "effecter_info": {
+                "effecterID": 4,
+                "entityType": 33,
+                "compositeEffecterCount": 1
+            },
+            "effecters": [
+                {
+                    "dbus_info": {
+                        "object_path": "/xyz/openbmc_project/control/host0/boot",
+                        "interface": "xyz.openbmc_project.Control.Boot.Mode",
+                        "property_name": "BootMode",
+                        "property_type": "string",
+                        "property_values": [
+                            "xyz.openbmc_project.Control.Boot.Mode.Modes.Regular"
+                        ]
+                    },
+                    "state": { "id": 196, "state_values": [2] }
+                }
+            ]
+        }
+    ]
+}
+```
+
+When `BootMode` changes to `Regular`, `pldmd` maps it to boot-progress state `2` and sends `SetStateEffecterStates` for effecter 4 on EID 9. A numeric mapping instead specifies `effecterDataSize`, `resolution`, `offset`, and `unitModifier`, and `pldmd` sends `SetNumericEffecterValue`.
+
+---
+
+## BMC as a PLDM Responder
+
+Everything above treats the BMC as a PLDM *requester*. `pldmd` is also a
+*responder* that answers PLDM commands from the host:
+
+- **Base responder** — handles `GetPLDMTypes`, `GetPLDMCommands`, `GetPLDMVersion`, and `GetTID`, so a host can discover what the BMC supports.
+- **FRU responder** (`FruImpl` / `FruParser`) — builds PLDM FRU record tables from D-Bus inventory using JSON that maps D-Bus interfaces/properties to FRU record fields, and supports hot add/remove.
+- **BIOS responder** (`BIOSConfig`) — loads attribute JSON, builds the String / Attribute / AttributeValue tables, persists them, and syncs with `xyz.openbmc_project.BIOSConfig.Manager` (`BaseBIOSTable`, `PendingAttributes`). See {% link docs/05-advanced/16-bios-firmware-management-guide.md %} for the BIOS-config side.
+
+Vendors extend any of these through the `oem_platform` / `oem_fru` / `oem_bios`
+handler base classes. (Verify class names against your `pldm` version.)
+
 ---
 
 ## Event Handling
@@ -442,6 +503,13 @@ PLDM devices can send asynchronous event notifications to the BMC using the `Pla
 | `pldmMessagePollEvent` | 0x05 | Device has queued events to be polled |
 | `heartbeatTimerElapsed` | 0x06 | Heartbeat timer expired |
 | `oemEvent` | 0xFF | Vendor-specific event |
+
+{: .note }
+`pldmd`'s `EventManager` also handles `PLDM_CPER_EVENT` (Common Platform Error
+Records): the CPER payload is written to a temporary file and a D-Bus dump entry
+is created (`createCperDumpEntry`), tying platform faults into the dump/log
+infrastructure. Large or fragmented events are reassembled via
+`pollForPlatformEventMessage`. (Verify against your `pldm` version.)
 
 ### Sensor Event Flow
 

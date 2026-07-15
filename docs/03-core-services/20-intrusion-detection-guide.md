@@ -119,6 +119,15 @@ flowchart TB
     LogLive --> Loop
 ```
 
+{: .note }
+The upstream `intrusionsensor` daemon does more than watch the chassis switch.
+It also monitors **LAN link state**: it subscribes to `PropertiesChanged` on
+`org.freedesktop.network1.Link` and logs a Redfish event whenever an interface's
+`OperationalState` changes. And besides the GPIO and hwmon (clear-on-read)
+intrusion paths this guide covers, it supports a **PCH register variant**
+(`ChassisIntrusionPchSensor`) that reads intrusion status over I2C using a
+status-bit mask. (Verify against your `dbus-sensors` version.)
+
 ### D-Bus Interfaces
 
 | Interface | Object Path | Source | Description |

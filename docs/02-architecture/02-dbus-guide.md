@@ -402,6 +402,12 @@ busctl call xyz.openbmc_project.ObjectMapper \
     GetSubTree sias "/" 0 1 "xyz.openbmc_project.Sensor.Value"
 ```
 
+{: .note }
+> The mapper exposes several other query methods on `xyz.openbmc_project.ObjectMapper` beyond `GetSubTree` and `GetObject`:
+> - **`GetAncestors`** -- returns the objects that are ancestors of a given path (filtered to the requested interfaces). Useful for walking *up* the tree, e.g. from a sensor to its owning chassis.
+> - **`GetAssociatedSubTree`** / **`GetAssociatedSubTreePaths`** -- like `GetSubTree`, but restricted to paths that are an association endpoint of a supplied `associatedPath`.
+> - **`GetAssociatedSubTreeById`** -- resolves a subtree from an inventory `id` plus an `association` name, so you don't need the full object path up front.
+
 ### Get Service for Object
 
 ```bash
@@ -421,6 +427,51 @@ mapper get-subtree / xyz.openbmc_project.Sensor.Value
 # Get service for object
 mapper get-service /xyz/openbmc_project/state/host0
 ```
+
+### mapper Client Library (libmapper)
+
+For C services that need to talk to the mapper without hand-rolling `busctl`-style calls, phosphor-objmgr ships a small C client library, **libmapper** (`libmapper/mapper.h`). It wraps the common lookups and, importantly, provides an **async "wait for object" primitive** used during boot ordering:
+
+| Function | Purpose |
+|----------|---------|
+| `mapper_wait_async(bus, event, objs[], cb, userdata, &wait)` | Fire `cb` once every object path in `objs[]` has appeared on the bus |
+| `mapper_subtree_async(bus, event, namespace, interface, cb, userdata, &subtree, op)` | Async subtree query (backed by `GetSubTreePaths`) |
+| `mapper_get_object(bus, obj, &reply)` | Synchronous `GetObject` -- returns the services + interfaces on a path |
+| `mapper_get_service(bus, obj, &service)` | Convenience wrapper returning just the owning service name |
+
+The async wait powers the templated **`mapper-wait@.service`** unit: a service can declare `After=` on `mapper-wait@-xyz-openbmc_project-...service` and systemd will block it until the required D-Bus object exists, rather than racing the object's provider at startup.
+
+```ini
+# Block a unit until a D-Bus object is present (path is systemd-escaped)
+[Unit]
+After=mapper-wait@-xyz-openbmc_project-state-host0.service
+Requires=mapper-wait@-xyz-openbmc_project-state-host0.service
+```
+
+---
+
+## Unit Failure Monitor
+
+phosphor-objmgr also builds a small standalone tool, **phosphor-unit-failure-monitor** (from `fail-monitor/`), that watches a systemd unit and reacts when it fails. It reads the **`ActiveState`** property of a *source* unit and, if that state is `failed`, either starts or stops a *target* unit.
+
+| Flag | Description |
+|------|-------------|
+| `-s`, `--source` | The unit to monitor (required) |
+| `-t`, `--target` | The unit to start or stop when the source fails (required) |
+| `-a`, `--action` | `start` or `stop` -- what to do to the target (required) |
+
+A typical use is a hardware watchdog takeover: if a fan-control service dies, hand control to a safe fallback target.
+
+```ini
+# fan-watchdog-monitor@.service (from meta-ibm)
+[Service]
+ExecStart=/usr/bin/phosphor-unit-failure-monitor \
+    --source %i \
+    --target obmc-fan-watchdog-takeover.target \
+    --action start
+```
+
+Internally the monitor calls `StartUnit`/`StopUnit` on `org.freedesktop.systemd1.Manager` after reading `ActiveState` from the source unit.
 
 ---
 
@@ -463,6 +514,44 @@ busctl introspect xyz.openbmc_project.ObjectMapper \
 
 # Look for 'associations' property and endpoints
 ```
+
+---
+
+## Legacy D-Bus REST API
+
+Before Redfish became the primary north-bound API, bmcweb exposed a **generic REST interface that maps directly onto D-Bus** (`features/openbmc_rest/openbmc_dbus_rest.hpp`). It is still present and handy for debugging, but is **largely superseded by Redfish** for production clients.
+
+{: .warning }
+Treat this as a debugging/legacy interface. New integrations should use Redfish; the generic D-Bus REST API bypasses Redfish's schema and access model.
+
+The routes mirror the D-Bus object tree under `/xyz/...` and `/org/...`, plus a few helpers:
+
+| Route | Method | Action |
+|-------|--------|--------|
+| `/xyz/<path>`, `/org/<path>` | `GET` | Read an object's interfaces and properties as JSON |
+| `/xyz/<path>/enumerate` | `GET` | Walk the whole subtree and dump every object/interface/property |
+| `/xyz/<path>` | `PUT` / `POST` | Write a property or invoke a D-Bus method |
+| `/xyz/<path>` | `DELETE` | Delete the object (if the owning service supports it) |
+| `/bus/system/`, `/list/` | `GET` | Enumerate bus names / all object paths |
+
+JSON is translated to and from native D-Bus types on the fly, using the object's introspection data to pick signatures (`convertJsonToDbus` / `convertDBusToJSON`).
+
+```bash
+# Enumerate every sensor object and its properties in one call
+curl -k -u root:0penBmc \
+    https://localhost/xyz/openbmc_project/sensors/enumerate
+
+# Read a single property set
+curl -k -u root:0penBmc \
+    https://localhost/xyz/openbmc_project/state/host0
+
+# Write a property (PUT the D-Bus value as JSON)
+curl -k -u root:0penBmc -X PUT -d '{"data": "xyz.openbmc_project.State.Host.Transition.On"}' \
+    https://localhost/xyz/openbmc_project/state/host0/attr/RequestedHostTransition
+```
+
+{: .note }
+> **D-Bus monitoring over WebSockets.** bmcweb also exposes a `/subscribe/` WebSocket (`features/openbmc_rest/dbus_monitor.hpp`, `DbusWebsocketSession` / `SessionMap`) that streams D-Bus **`PropertiesChanged`** and **`InterfacesAdded`** signals to the browser as JSON -- this is what drives live value updates in the web UI. The client opens the socket and sends a filter such as `{"paths": ["/xyz/openbmc_project/sensors"], "interfaces": ["xyz.openbmc_project.Sensor.Value"]}`; matching signals then arrive as JSON messages. The bmcweb repo ships a runnable example, [`scripts/websocket_test.py`](https://github.com/openbmc/bmcweb/blob/master/scripts/websocket_test.py), that streams sensor readings from a live BMC.
 
 ---
 

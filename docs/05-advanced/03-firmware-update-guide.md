@@ -871,6 +871,15 @@ ubiupdatevol /dev/ubi0_1 /tmp/image-rofs
 
 OpenBMC implements A/B redundant boot for high availability.
 
+{: .note }
+Newer phosphor-bmc-code-mgmt builds ship a `side-switch` utility that compares
+the running image's priority against every available image; if a higher-priority
+image exists it powers the host off, arms a one-time auto-power-on, and reboots
+the BMC so it comes up on the preferred side. Image signature verification
+(`Signature`, OpenSSL) can additionally enforce **post-quantum** algorithms and a
+**Minimum Ship Level (MSL)** check that blocks flashing a version below a
+configured baseline. (Verify against your phosphor-bmc-code-mgmt version.)
+
 ### Dual Image Architecture
 
 ```mermaid

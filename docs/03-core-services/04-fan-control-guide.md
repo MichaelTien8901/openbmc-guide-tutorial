@@ -666,6 +666,35 @@ For systems with multiple thermal zones:
 
 ---
 
+## Exit-Air Temperature and Airflow (CFM)
+
+The `exitairtempsensor` daemon (part of dbus-sensors) publishes two *calculated*
+sensors that let thermal control reason about airflow, not just temperature.
+
+**Airflow (CFM).** A `CFMSensor` estimates airflow in cubic feet per minute from
+fan tachometer readings, using per-fan coefficients (`c1`, `c2`,
+`tachMinPercent`, `tachMaxPercent`, `maxCFM`). It also publishes `PWMLimit` /
+`CFMLimit` values that phosphor-pid-control can consume to cap fan PWM against a
+system-wide airflow ceiling.
+
+**Exit-air temperature.** An `ExitAirTempSensor` derives the chassis exit-air
+temperature from total CFM, the inlet temperature, and system power, smoothed by
+an exponential moving average. Its tuning constants (`powerFactorMin`/
+`powerFactorMax`, `qMin`/`qMax`, `alphaS`, `alphaF`, `pOffset`) are supplied
+through Entity Manager configuration. (Verify the exact key names against your
+dbus-sensors version.)
+
+Both sensors appear on D-Bus like any other sensor, so they can feed a PID zone
+as an input or drive thresholds. Configure them with Entity Manager `Exposes`
+entries of type `ExitAirTempSensor` / `CFMSensor` on the relevant chassis.
+
+{: .note }
+These are computed sensors with no backing hardware device. If either reads
+`NaN`, confirm that its input sensors (fan tachs, inlet temperature, system
+power) are present and that the coefficient set matches your chassis.
+
+---
+
 ## Stepwise Control
 
 For simple table-based control instead of PID:

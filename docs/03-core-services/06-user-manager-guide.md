@@ -487,6 +487,69 @@ curl -k -u root:0penBmc -X PATCH \
 
 ---
 
+## Multi-Factor Authentication (MFA)
+
+Beyond passwords, LDAP, and Active Directory, **phosphor-user-manager** supports
+**multi-factor authentication (MFA)** using **TOTP** (Time-based One-Time
+Password), which is compatible with Google Authenticator and equivalent
+authenticator apps. When MFA is enabled for a user, login requires both the
+account password and a current one-time passcode (OTP).
+
+### How TOTP Enrollment Works
+
+1. **Secret generation** — enabling TOTP for a user runs the
+   `google-authenticator` utility to produce a per-user secret. OpenBMC invokes it
+   non-interactively in time-based mode
+   (`google-authenticator -s <path> -u -W -Q NONE -t -f -d -C`), so no QR code or
+   interactive prompt is generated.
+2. **Provisional secret** — the new secret is first written to a temporary file
+   (a `.google_authenticator.tmp` under the user's home) and is **not yet active**.
+3. **Verification makes it permanent** — the user must submit one valid OTP. Only
+   after that OTP verifies successfully is the secret promoted (renamed) to its
+   live location, `~/.google_authenticator`. A failed verification — or disabling
+   MFA — removes the temporary secret, so a half-finished enrollment never locks
+   the account.
+
+### OTP Verification
+
+One-time passcodes are checked through a **dedicated PAM service**, `mfa_pam`
+(installed to `/etc/pam.d/mfa_pam`). The internal `Totp::verify(username, token)`
+helper opens a PAM conversation against that service, answers its
+`Verification code:` prompt with the supplied token, and reports success only when
+PAM accepts the code. Isolating OTP checks in their own PAM stack lets MFA layer
+on top of the existing `common-auth` password flow without modifying it.
+
+### MFA State and D-Bus
+
+MFA configuration lives on the `xyz.openbmc_project.User.Manager` service, exposed
+through the `xyz.openbmc_project.User.MultiFactorAuthConfiguration` interface —
+whose `Enabled` property selects the active MFA type (for example
+`GoogleAuthenticator` or `None`) — and is mirrored to the Redfish `AccountService`.
+The selected MFA type and related state are **persisted as JSON** (via the
+manager's `JsonSerializer`), so the setting survives a BMC reboot.
+
+```bash
+# Inspect the user manager object and its MFA-related interfaces
+busctl introspect xyz.openbmc_project.User.Manager \
+    /xyz/openbmc_project/user
+```
+
+### Per-User Bypass
+
+For temporary exceptions — a break-glass account, or a user who has lost their
+authenticator — phosphor-user-manager supports a per-user **bypass protocol**.
+Bypassing a protocol (such as `GoogleAuthenticator`) exempts that user from the
+corresponding factor and clears their stored secret. The bypass selection is
+itself persisted as JSON, so it too survives a reboot.
+
+{: .note }
+> **MFA secrets are sensitive.** A user's `~/.google_authenticator` secret is the
+> shared key for their second factor. It is stored with restricted permissions
+> under the user's home directory and must never be logged, exported, or copied
+> off the BMC — treat it with the same care as a private key or password hash.
+
+---
+
 ## Session Management
 
 ### View Active Sessions

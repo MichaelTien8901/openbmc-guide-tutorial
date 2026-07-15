@@ -288,6 +288,14 @@ busctl call xyz.openbmc_project.Network \
     Delete
 ```
 
+{: .note }
+**Static neighbors and static gateways** follow the same child-object pattern as
+IP addresses. A static ARP/NDP neighbor entry (`neighbor.cpp`) and a static
+default gateway (`static_gateway.cpp`) each appear as their own D-Bus object
+beneath `/xyz/openbmc_project/network/eth0`, and each exposes
+`xyz.openbmc_project.Object.Delete`. Remove one exactly like an IP address: use
+`busctl tree` to find its object path, then call `Delete` on it.
+
 ---
 
 ## IPv6 Configuration
@@ -433,6 +441,15 @@ busctl set-property xyz.openbmc_project.Network \
     DefaultGateway s "192.168.1.1"
 ```
 
+{: .note }
+**First-boot unique hostname.** On first boot the hostname manager
+(`hostname_manager.cpp`) derives a unique suffix from the BMC serial number —
+read from the inventory `xyz.openbmc_project.Inventory.Item.Bmc` /
+`Decorator.Asset` `SerialNumber` property — and falls back to the MAC address
+when no serial is available. It applies the result once as `<hostname>-<suffix>`
+via `org.freedesktop.hostname1` `SetStaticHostname`, then writes a marker file so
+later boots leave any user-set hostname untouched.
+
 ---
 
 ## MAC Address Configuration
@@ -460,6 +477,14 @@ curl -k -u root:0penBmc -X PATCH \
     https://localhost/redfish/v1/Managers/bmc/EthernetInterfaces/eth0
 ```
 
+{: .note }
+**Inventory-assigned MAC.** Where a platform stores a MAC address in inventory,
+`inventory_mac.cpp` copies it onto the matching interface on first boot. It reads
+the `MACAddress` property from
+`xyz.openbmc_project.Inventory.Item.NetworkInterface`, maps inventory paths to
+interfaces via `/usr/share/network/config.json`, and records completion with a
+`/var/lib/network/firstBoot_<interface>` marker so the assignment runs only once.
+
 ---
 
 ## Network Protocol Configuration
@@ -477,6 +502,67 @@ curl -k -u root:0penBmc -X PATCH \
     }' \
     https://localhost/redfish/v1/Managers/bmc/NetworkProtocol
 ```
+
+---
+
+## NCSI Management
+
+Network Controller Sideband Interface (NC-SI) lets the BMC share a network
+controller with the host over a sideband channel (RBT, or increasingly MCTP).
+phosphor-networkd ships two command-line helpers for talking to NC-SI-capable
+NICs:
+
+| Tool | Backend | Typical use |
+|------|---------|-------------|
+| `ncsi-netlink` | Netlink only | Package/channel selection through the kernel NC-SI driver |
+| `ncsi-cmd` | Netlink **or** MCTP | Discovery, raw/OEM commands, and firmware dumps |
+
+### Discover Packages and Channels
+
+`ncsi-cmd discover` walks every package (0-7) and channel (0-31), issuing
+*Clear Initial State* and *Get Capabilities* to enumerate what the NIC exposes:
+
+```bash
+# Discover over the kernel netlink backend (NIC selected by interface)
+ncsi-cmd -i eth0 discover
+
+# Discover over MCTP (endpoint ID 10 on the default network)
+ncsi-cmd -m 10 discover
+```
+
+### Common Options
+
+| Option | Description |
+|--------|-------------|
+| `-p, --package <n>` | Target package index (required for non-discovery commands) |
+| `-c, --channel <n>` | Target channel index |
+| `-i, --interface <ifindex>` | Select the NIC by network interface (netlink backend) |
+| `-m, --mctp [NET,]<EID>` | Select the NIC by MCTP endpoint (MCTP backend) |
+| `-v, --verbose` | Verbose output |
+
+Every subcommand except `discover` needs a `--package`/`-p` value plus exactly
+one interface type — `-i` (netlink) **or** `-m` (MCTP), never both.
+
+### Send Raw, OEM, and Dump Commands
+
+```bash
+# raw <type> [hex payload...] — send an arbitrary NC-SI command
+ncsi-cmd -p 0 -c 0 -i eth0 raw 0x15
+
+# oem [hex payload...] — send an OEM command (NC-SI type 0x50)
+ncsi-cmd -p 0 -c 0 -i eth0 oem 0x00 0x00 0x00
+
+# Capture NC-SI core/crash dumps to a file
+ncsi-cmd -p 0 -i eth0 core-dump /tmp/ncsi-core.bin
+ncsi-cmd -p 0 -i eth0 crash-dump /tmp/ncsi-crash.bin
+```
+
+{: .note }
+The netlink backend drives the in-kernel NC-SI driver, so `-i` takes a normal
+interface. The MCTP backend instead talks to the NIC as an MCTP endpoint (`-m`),
+reusing the MCTP stack rather than the network driver. `ncsi-netlink` is the
+older, netlink-only helper (for example `ncsi-netlink -x 3 -p 0 -i`); `ncsi-cmd`
+supersedes it and adds the MCTP path.
 
 ---
 
@@ -500,6 +586,61 @@ ipmitool lan set 1 defgw ipaddr 192.168.1.1
 # Enable DHCP
 ipmitool lan set 1 ipsrc dhcp
 ```
+
+---
+
+## Hypervisor Network Synchronization
+
+{: .note }
+This feature is **IBM / PowerVM-specific**. It lives under
+`src/ibm/hypervisor-network-mgr-src/` in phosphor-networkd and is built only for
+IBM Power systems, where the BMC stages network settings on behalf of the
+PowerVM hypervisor (its "virtual management interface", VMI). It is not present
+on typical x86 or generic ARM platforms.
+
+On IBM Power systems a second daemon, **HypNetworkMgr**, publishes the D-Bus
+service `xyz.openbmc_project.Network.Hypervisor`. It mirrors the familiar network
+object model for the hypervisor's own interfaces so management tooling can
+pre-stage the hypervisor's IP configuration before the host boots:
+
+| D-Bus object | Interface class | Role |
+|--------------|-----------------|------|
+| Hypervisor ethernet interface (`eth0`, `eth1`) | `HypEthInterface` | Per-interface container for staged hypervisor IP addresses |
+| Hypervisor IP address | `HypIPAddress` | A single staged IPv4 address / gateway / prefix |
+| Hypervisor system config | `HypSysConfig` | Hostname and other system-wide settings |
+
+### Backed by BIOS Attributes
+
+Instead of writing `systemd-networkd` files, HypNetworkMgr persists every value
+as a **BIOS attribute** through `xyz.openbmc_project.BIOSConfigManager`
+(interface `xyz.openbmc_project.BIOSConfig.Manager`). The attributes use a
+`vmi_`-prefixed naming scheme, for example:
+
+| BIOS attribute | Meaning |
+|----------------|---------|
+| `vmi_<intf>_ipv4_ipaddr` | Staged IPv4 address |
+| `vmi_<intf>_ipv4_gateway` | Staged default gateway |
+| `vmi_<intf>_ipv4_prefix_length` | Prefix length |
+| `vmi_<intf>_ipv4_method` | Addressing method (e.g. `IPv4Static`) |
+| `vmi_hostname` | Hypervisor hostname |
+
+The hypervisor reads these attributes as it initializes, so the BMC and
+hypervisor stay in sync without a running host.
+
+```bash
+# List the hypervisor network objects (interfaces, staged IPs, system config)
+busctl tree xyz.openbmc_project.Network.Hypervisor
+
+# Introspect one of the objects listed above
+busctl introspect xyz.openbmc_project.Network.Hypervisor <object-path>
+```
+
+{: .warning }
+`HypIPAddress` properties (address, gateway, prefix length, origin, type) are
+**immutable after the object is created** — every setter rejects updates with a
+`NotAllowed` error ("Property update is not allowed"). To change a staged
+address, delete the object via `xyz.openbmc_project.Object.Delete` and create a
+new one rather than patching it in place.
 
 ---
 

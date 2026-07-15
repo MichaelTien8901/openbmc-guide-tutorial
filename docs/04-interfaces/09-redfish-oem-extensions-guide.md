@@ -216,6 +216,57 @@ bmcweb/
 
 ---
 
+## Regenerating Redfish Schemas and Generated Code
+
+Much of bmcweb is **generated** from DMTF schema files rather than hand-written: C++ enums, the aggregation collection table, and the message/privilege registries are all produced from CSDL/JSON by scripts in bmcweb's `scripts/` directory. Run this workflow after you **add or upgrade a standard schema** or **author an OEM CSDL extension**, then rebuild bmcweb so the generated headers pick up your changes.
+
+### The Generation Pipeline
+
+Run these from the root of the bmcweb source tree, in order:
+
+| Step | Script | What it does |
+|------|--------|--------------|
+| 1 | `scripts/update_schemas.py` | Clones the DMTF **Redfish-Publications** repo at a pinned tag, copies the CSDL/JSON schemas in, selects the newest version of each schema with a semantic `SchemaVersion` sort, and refreshes the symlinks for the installed schemas. |
+| 2 | `scripts/generate_schema_enums.py` | Parses CSDL `EnumType` definitions into C++ `enum class` types under `redfish-core/include/generated/enums/`, emitting a `NLOHMANN_JSON_SERIALIZE_ENUM` macro for each so values (de)serialize to/from JSON automatically. |
+| 3 | `scripts/generate_schema_collections.py` | Extracts the top-level collection URIs and writes them to `redfish-core/include/aggregation_utils.hpp`, which Redfish Aggregation uses. |
+| 4 | `scripts/parse_registries.py` | Generates the message-registry headers (for example `base_message_registry.hpp`) and `privilege_registry.hpp` from the DMTF message registries and the privilege registry. |
+| 5 | `scripts/csdl-to-json-converter/` | Holds the OpenBMC config (`openbmc-config.json`) for the DMTF `csdl-to-json.py` converter, which turns OEM/local CSDL into JSON schema so your OEM types are served as JSON. See the directory's `README.md`. |
+
+`scripts/update_schemas.py` runs the downstream generators for you after it refreshes the schemas, so a full upgrade is usually a single command. Run the individual generators only when you are iterating on one artifact (for example, regenerating just the enums after editing an `EnumType`).
+
+A separate helper, `scripts/generate_auth_certificates.py`, creates mTLS **test** certificates (a CA plus server and client certificates) for exercising client-certificate authentication against bmcweb -- handy when validating OEM routes that require mTLS.
+
+### Running the Workflow
+
+```bash
+cd bmcweb
+
+# 1. Pull the latest DMTF schemas, re-select versions, refresh symlinks
+#    (this also invokes the generators below on your behalf)
+python3 scripts/update_schemas.py
+
+# 2-4. Regenerate individual artifacts while iterating
+python3 scripts/generate_schema_enums.py
+python3 scripts/generate_schema_collections.py
+python3 scripts/parse_registries.py
+
+# 5. (OEM) Convert your OEM CSDL to JSON with the DMTF converter,
+#    using OpenBMC's config -- see scripts/csdl-to-json-converter/README.md
+#    csdl-to-json.py --input <oem-csdl> --output <json-out> \
+#                    --config scripts/csdl-to-json-converter/openbmc-config.json
+
+# Rebuild so the regenerated headers are compiled in
+bitbake bmcweb -c cleansstate && bitbake bmcweb
+```
+
+{: .tip }
+> When adding an **OEM CSDL** schema, add it to the input consumed by `scripts/csdl-to-json-converter/openbmc-config.json`, then re-run the pipeline. The generated JSON is what the Redfish Service Validator (below) uses to validate your OEM resources against their schema.
+
+{: .warning }
+> The generated headers under `redfish-core/include/generated/` are checked into the bmcweb tree. Regenerate them with these scripts rather than editing them by hand -- manual edits are overwritten the next time anyone runs the pipeline.
+
+---
+
 ## OEM Route Implementation
 
 ### C++ Handler Structure

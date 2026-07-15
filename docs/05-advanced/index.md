@@ -48,6 +48,7 @@ Modern platform management relies on standardized protocols for component commun
 | [Firmware Update]({% link docs/05-advanced/03-firmware-update-guide.md %}) | BMC/PNOR updates, signing |
 | [PLDM Firmware Update]({% link docs/05-advanced/20-pldm-firmware-update-guide.md %}) | Type 5 device firmware update via PLDM |
 | [BIOS Firmware Management]({% link docs/05-advanced/16-bios-firmware-management-guide.md %}) | Host firmware update via BMC, BIOS config |
+| [Device Firmware Update]({% link docs/05-advanced/23-device-firmware-update-guide.md %}) | CPLD, voltage regulator, EEPROM, TPM device updaters |
 
 ### Debug Features
 

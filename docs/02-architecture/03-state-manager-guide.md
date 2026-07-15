@@ -306,6 +306,15 @@ busctl set-property xyz.openbmc_project.State.Chassis \
     "xyz.openbmc_project.State.Chassis.Transition.On"
 ```
 
+{: .note }
+**Power status and Power-On Hours.** Beyond `On`/`Off`, the chassis manager
+publishes `CurrentPowerStatus` on `xyz.openbmc_project.State.Chassis`, one of
+`Good`, `BrownOut`, or `UninterruptiblePowerSupply` (`Undefined` before it is
+known). The `chassis-check-power-status` helper blocks a power-on request when
+the status is not `Good`. The manager also implements
+`xyz.openbmc_project.State.PowerOnHours` — a `POHCounter` property that increments
+while the chassis is on and is persisted across reboots (restored on start).
+
 ### Host State Manager
 
 Controls the host CPU/OS state.
@@ -345,6 +354,62 @@ busctl set-property xyz.openbmc_project.State.Host \
     /xyz/openbmc_project/state/host0 \
     xyz.openbmc_project.State.Host RequestedHostTransition s \
     "xyz.openbmc_project.State.Host.Transition.Off"
+```
+
+### Hypervisor State Manager
+
+{: .note }
+This manager is **IBM / PowerVM-specific** (`hypervisor_state_manager.cpp`) and
+is built only for IBM Power systems. On other platforms it is absent.
+
+Tracks the state of the PowerVM hypervisor as a second host instance.
+
+**D-Bus Service:** `xyz.openbmc_project.State.Hypervisor`
+**Object Path:** `/xyz/openbmc_project/state/hypervisor0`
+**Interface:** `xyz.openbmc_project.State.Host` (it reuses the Host interface)
+
+Unlike `host0`, this instance is intentionally limited:
+
+- `RequestedHostTransition` **only accepts `On`** — any other value is rejected
+  (the service reports `BMCNotReady`).
+- `CurrentHostState` is not driven by a power sequence; it is **derived from the
+  host's `BootProgress`**:
+
+| Host `BootProgress` | Hypervisor `CurrentHostState` |
+|---------------------|-------------------------------|
+| `Unspecified` | `Off` |
+| `SystemInitComplete` | `Standby` |
+| `OSRunning` | `Running` |
+
+```bash
+# Read the hypervisor's derived state
+busctl get-property xyz.openbmc_project.State.Hypervisor \
+    /xyz/openbmc_project/state/hypervisor0 \
+    xyz.openbmc_project.State.Host CurrentHostState
+```
+
+### Host Firmware Condition
+
+An optional helper, **host-condition-gpio** (service
+`phosphor-host-condition-gpio@.service`, source `host_condition_gpio/`), reports
+whether host firmware is alive by reading a GPIO rather than by tracking a
+transition. It looks for a GPIO line named `<name>-ready` (active high) or
+`<name>-ready-n` (active low) and publishes the result on
+`xyz.openbmc_project.Condition.HostFirmware`:
+
+| `FirmwareCondition` | Meaning |
+|---------------------|---------|
+| `Running` | Ready GPIO asserted (host firmware is up) |
+| `Off` | Ready GPIO deasserted |
+| `Unknown` | No matching GPIO line, or a read error |
+
+This lets other services ask "is the host actually running?" independently of
+the state machine — for example to gate a power-on decision.
+
+```bash
+# Read the reported host firmware condition (path/service are platform-provided)
+busctl get-property <service> <path> \
+    xyz.openbmc_project.Condition.HostFirmware CurrentFirmwareCondition
 ```
 
 ---
@@ -484,6 +549,46 @@ flowchart LR
 
 ---
 
+## Scheduled Host Transitions
+
+The optional **scheduled-host-transition** service (source
+`scheduled_host_transition.cpp`, unit
+`xyz.openbmc_project.State.ScheduledHostTransition@.service`) lets you queue a
+power transition to run at a future wall-clock time.
+
+**D-Bus Interface:** `xyz.openbmc_project.State.ScheduledHostTransition`
+**Object Path:** `/xyz/openbmc_project/state/host0`
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ScheduledTime` | `uint64` | Epoch seconds at which to run the transition. `0` **cancels** any pending schedule. |
+| `ScheduledTransition` | enum | Which `Host.Transition` to apply (e.g. `On`, `Off`) |
+
+```bash
+# Choose the transition, then arm it for a specific epoch time
+busctl set-property xyz.openbmc_project.State.ScheduledHostTransition \
+    /xyz/openbmc_project/state/host0 \
+    xyz.openbmc_project.State.ScheduledHostTransition ScheduledTransition s \
+    "xyz.openbmc_project.State.Host.Transition.On"
+
+busctl set-property xyz.openbmc_project.State.ScheduledHostTransition \
+    /xyz/openbmc_project/state/host0 \
+    xyz.openbmc_project.State.ScheduledHostTransition ScheduledTime t 1893456000
+
+# Cancel a pending schedule
+busctl set-property xyz.openbmc_project.State.ScheduledHostTransition \
+    /xyz/openbmc_project/state/host0 \
+    xyz.openbmc_project.State.ScheduledHostTransition ScheduledTime t 0
+```
+
+{: .note }
+The schedule is persisted to a JSON file, so it survives a BMC reboot. The timer
+arms against `CLOCK_REALTIME` (with `TFD_TIMER_ABSTIME | TFD_TIMER_CANCEL_ON_SET`),
+so if the BMC's clock is stepped — for example by NTP — the pending transition is
+re-evaluated against the new time.
+
+---
+
 ## Power Restore Policy
 
 Configure what happens after AC power loss.
@@ -534,6 +639,36 @@ busctl get-property xyz.openbmc_project.State.Host \
     /xyz/openbmc_project/state/host0 \
     xyz.openbmc_project.State.Boot.Progress BootProgress
 ```
+
+---
+
+## Security Checks
+
+At BMC startup the **secure_boot_check** program (`secure_boot_check.cpp`)
+validates the platform's security posture and raises event logs when something is
+wrong. It does **not** itself power down or quiesce the system — it records
+findings for the rest of the stack to act on.
+
+What it inspects:
+
+| Check | Source |
+|-------|--------|
+| Secure boot enabled | `bmc-secure-boot` GPIO and a secure-boot sysfs attribute |
+| ABR / golden-image active | an alternate-boot-region sysfs attribute |
+| TPM measurement present | if a TPM device exists, its measurement sysfs value must be non-zero |
+| Manufacturing mode | the `quiesce_on_hw_error` setting (LoggingSettings) gates whether violations are logged |
+
+Event logs it can create:
+
+| Error | Raised when |
+|-------|-------------|
+| `xyz.openbmc_project.State.Error.TpmMeasurementFail` | TPM measurement is missing, empty, or zero |
+| `xyz.openbmc_project.State.Error.SecurityCheckFail` | secure boot is disabled, or the ABR / golden image is active |
+
+{: .note }
+Because these are ordinary phosphor-logging events, wire your platform's policy
+(alerting, quiesce, or ignore in the lab) to the error identifiers above rather
+than expecting `secure_boot_check` to enforce anything on its own.
 
 ---
 

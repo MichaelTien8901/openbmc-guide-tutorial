@@ -145,7 +145,7 @@ The monitor reads its configuration from a JSON file, typically installed at `/e
 
 ### Configuration File Format
 
-Each entry in the `GpioConfigs` array defines one GPIO line to monitor.
+The configuration file is a **top-level JSON array**; each entry defines one GPIO line to monitor.
 
 ```json
 {
@@ -154,8 +154,9 @@ Each entry in the `GpioConfigs` array defines one GPIO line to monitor.
     "GpioNum": 0,
     "ChipId": "",
     "EventMon": "<RISING|FALLING|BOTH>",
+    "Target": "<systemd-unit-for-any-event>",
     "Targets": {
-        "<signal-value>": ["<systemd-target-to-activate>"]
+        "<RISING|FALLING|INIT_HIGH|INIT_LOW>": ["<systemd-target-to-activate>"]
     },
     "Continue": <true|false>
 }
@@ -167,45 +168,56 @@ Each entry in the `GpioConfigs` array defines one GPIO line to monitor.
 | `LineName` | string | GPIO line name from device tree (must match `gpio-line-names`) |
 | `GpioNum` | integer | GPIO offset number (used only if `LineName` is empty) |
 | `ChipId` | string | GPIO chip path (used only if `LineName` is empty, e.g., `/dev/gpiochip0`) |
-| `EventMon` | string | Edge type to watch: `RISING`, `FALLING`, or `BOTH` |
-| `Targets` | object | Maps signal values (`"0"` or `"1"`) to arrays of systemd target names |
+| `EventMon` | string | Edge type to watch: `RISING`, `FALLING`, or `BOTH` (default `BOTH`) |
+| `Target` | string | Optional single systemd unit started on any monitored event |
+| `Targets` | object | Optional map of event name — `RISING`, `FALLING`, or `INIT_HIGH`/`INIT_LOW` (evaluated once at startup from the line's level) — to arrays of systemd units |
 | `Continue` | boolean | `true` for continuous monitoring, `false` for one-shot |
 
 {: .note }
 Prefer `LineName` over `GpioNum` + `ChipId`. Named lines are portable across kernel versions and device tree changes, while raw GPIO numbers can shift when pins are remapped.
+
+{: .note }
+Each GPIO entry also accepts optional `ActiveLow` (bool) and `Bias`
+(`AS_IS` / `DISABLE` / `PULL_UP` / `PULL_DOWN`) fields that configure the libgpiod
+line request. In addition to runtime edges, the monitor can fire targets for a
+line's *initial* power-on level using the `INIT_HIGH` / `INIT_LOW` target keys.
+
+{: .note }
+The configuration file is a **top-level JSON array** of entries — there is no outer
+wrapper object. Use `Target` for a single unit fired on any event, or `Targets` to
+map specific events (`RISING`/`FALLING`, plus `INIT_HIGH`/`INIT_LOW` evaluated once
+at startup from the line's current level) to unit lists.
 
 ### Annotated Example
 
 The following configuration monitors a power button (one-shot, falling edge) and chassis intrusion sensor (continuous, both edges). Save this as `phosphor-multi-gpio-monitor.json`:
 
 ```json
-{
-    "GpioConfigs": [
-        {
-            "Name": "PowerButton",          // Human-readable label for logs
-            "LineName": "POWER_BUTTON",     // Must match device tree gpio-line-names
-            "GpioNum": 0,                   // Ignored when LineName is set
-            "ChipId": "",                   // Ignored when LineName is set
-            "EventMon": "FALLING",          // Trigger on button press (active-low)
-            "Targets": {
-                "0": ["obmc-chassis-hard-poweroff@0.target"]
-            },
-            "Continue": false               // One-shot: stop watching after first event
+[
+    {
+        "Name": "PowerButton",          // Human-readable label for logs
+        "LineName": "POWER_BUTTON",     // Must match device tree gpio-line-names
+        "GpioNum": 0,                   // Ignored when LineName is set
+        "ChipId": "",                   // Ignored when LineName is set
+        "EventMon": "FALLING",          // Trigger on button press (active-low)
+        "Targets": {
+            "FALLING": ["obmc-chassis-hard-poweroff@0.target"]
         },
-        {
-            "Name": "ChassisIntrusion",
-            "LineName": "CHASSIS_INTRUSION",
-            "GpioNum": 0,
-            "ChipId": "",
-            "EventMon": "BOTH",             // Detect both open and close
-            "Targets": {
-                "0": ["chassis-intrusion-detected@0.target"],
-                "1": ["chassis-intrusion-cleared@0.target"]
-            },
-            "Continue": true                // Continuous: keep watching
-        }
-    ]
-}
+        "Continue": false               // One-shot: stop watching after first event
+    },
+    {
+        "Name": "ChassisIntrusion",
+        "LineName": "CHASSIS_INTRUSION",
+        "GpioNum": 0,
+        "ChipId": "",
+        "EventMon": "BOTH",             // Detect both open and close
+        "Targets": {
+            "FALLING": ["chassis-intrusion-detected@0.target"],
+            "RISING": ["chassis-intrusion-cleared@0.target"]
+        },
+        "Continue": true                // Continuous: keep watching
+    }
+]
 ```
 
 See [Example 2](#example-2-multi-signal-platform-configuration) for a fuller production configuration with presence detection signals.
@@ -229,7 +241,7 @@ When a GPIO event fires, phosphor-multi-gpio-monitor activates one or more syste
 
 ### How It Works
 
-When the monitor detects an edge event, it reads the new line value (`"0"` or `"1"`), looks up the matching targets array, and calls `systemctl start <target>` for each target.
+When the monitor detects an event, it determines the event name (`RISING` or `FALLING`), looks up the matching array in `Targets`, and calls `systemctl start <target>` for each one. A single `Target`, if defined, is started on every event.
 
 ### Standard OpenBMC Targets
 
@@ -275,7 +287,7 @@ You can activate multiple targets for a single event. List all targets in the ar
 
 ```json
 "Targets": {
-    "0": [
+    "FALLING": [
         "obmc-chassis-hard-poweroff@0.target",
         "log-power-button-pressed@0.target"
     ]
@@ -366,6 +378,35 @@ Some platforms install the JSON configuration to `/etc/` instead of `/usr/share/
 
 ---
 
+## Presence Detection (phosphor-multi-gpio-presence)
+
+The monitor covered above fires **systemd targets** on GPIO edges. A sibling
+daemon in the same repository, `phosphor-multi-gpio-presence`, instead maps a GPIO
+directly to **inventory presence** — no systemd target needed. On each edge it
+updates the Inventory Manager's `Present` property (locating the manager through
+the ObjectMapper) and can bind or unbind the component's device driver in sysfs
+for hot-plug support.
+
+Its JSON config names the GPIO plus the **inventory object path** it controls,
+rather than a `Targets` map. A representative entry looks like:
+
+```json
+{
+    "Name": "fan0",
+    "LineName": "FAN0_PRESENT",
+    "Inventory": "/xyz/openbmc_project/inventory/system/chassis/fan0",
+    "ActiveLow": true,
+    "Bias": "PULL_UP"
+}
+```
+
+{: .note }
+The presence daemon's config keys are `Name`, `LineName` (or `GpioNum` + `ChipId`),
+`Inventory`, an optional `ExtraInterfaces` list, `ActiveLow`, and `Bias` — a schema
+distinct from the monitor's `Targets`-based one.
+
+---
+
 ## Porting Guide
 
 Follow these steps to enable GPIO monitoring on your platform:
@@ -400,23 +441,21 @@ gpioinfo | grep -E "POWER_BUTTON|CHASSIS_INTRUSION|PS0_PRESENT"
 This is the simplest possible configuration -- one GPIO line that triggers a hard power off when pressed.
 
 ```json
-{
-    "GpioConfigs": [
-        {
-            "Name": "PowerButton",
-            "LineName": "POWER_BUTTON",
-            "GpioNum": 0,
-            "ChipId": "",
-            "EventMon": "FALLING",
-            "Targets": {
-                "0": [
-                    "obmc-chassis-hard-poweroff@0.target"
-                ]
-            },
-            "Continue": false
-        }
-    ]
-}
+[
+    {
+        "Name": "PowerButton",
+        "LineName": "POWER_BUTTON",
+        "GpioNum": 0,
+        "ChipId": "",
+        "EventMon": "FALLING",
+        "Targets": {
+            "FALLING": [
+                "obmc-chassis-hard-poweroff@0.target"
+            ]
+        },
+        "Continue": false
+    }
+]
 ```
 
 ### Example 2: Multi-Signal Platform Configuration
@@ -424,56 +463,54 @@ This is the simplest possible configuration -- one GPIO line that triggers a har
 A production configuration monitoring power, reset, intrusion, and fan presence. Duplicate the fan entry pattern for additional fans (FAN1, FAN2, FAN3, etc.).
 
 ```json
-{
-    "GpioConfigs": [
-        {
-            "Name": "PowerButton",
-            "LineName": "POWER_BUTTON",
-            "GpioNum": 0,
-            "ChipId": "",
-            "EventMon": "FALLING",
-            "Targets": {
-                "0": ["obmc-chassis-hard-poweroff@0.target"]
-            },
-            "Continue": false
+[
+    {
+        "Name": "PowerButton",
+        "LineName": "POWER_BUTTON",
+        "GpioNum": 0,
+        "ChipId": "",
+        "EventMon": "FALLING",
+        "Targets": {
+            "FALLING": ["obmc-chassis-hard-poweroff@0.target"]
         },
-        {
-            "Name": "ResetButton",
-            "LineName": "RESET_BUTTON",
-            "GpioNum": 0,
-            "ChipId": "",
-            "EventMon": "FALLING",
-            "Targets": {
-                "0": ["obmc-host-reset@0.target"]
-            },
-            "Continue": false
+        "Continue": false
+    },
+    {
+        "Name": "ResetButton",
+        "LineName": "RESET_BUTTON",
+        "GpioNum": 0,
+        "ChipId": "",
+        "EventMon": "FALLING",
+        "Targets": {
+            "FALLING": ["obmc-host-reset@0.target"]
         },
-        {
-            "Name": "ChassisIntrusion",
-            "LineName": "CHASSIS_INTRUSION",
-            "GpioNum": 0,
-            "ChipId": "",
-            "EventMon": "BOTH",
-            "Targets": {
-                "0": ["chassis-intrusion-detected@0.target"],
-                "1": ["chassis-intrusion-cleared@0.target"]
-            },
-            "Continue": true
+        "Continue": false
+    },
+    {
+        "Name": "ChassisIntrusion",
+        "LineName": "CHASSIS_INTRUSION",
+        "GpioNum": 0,
+        "ChipId": "",
+        "EventMon": "BOTH",
+        "Targets": {
+            "FALLING": ["chassis-intrusion-detected@0.target"],
+            "RISING": ["chassis-intrusion-cleared@0.target"]
         },
-        {
-            "Name": "Fan0Presence",
-            "LineName": "FAN0_PRESENT",
-            "GpioNum": 0,
-            "ChipId": "",
-            "EventMon": "BOTH",
-            "Targets": {
-                "0": ["fan0-present@0.target"],
-                "1": ["fan0-absent@0.target"]
-            },
-            "Continue": true
-        }
-    ]
-}
+        "Continue": true
+    },
+    {
+        "Name": "Fan0Presence",
+        "LineName": "FAN0_PRESENT",
+        "GpioNum": 0,
+        "ChipId": "",
+        "EventMon": "BOTH",
+        "Targets": {
+            "FALLING": ["fan0-present@0.target"],
+            "RISING": ["fan0-absent@0.target"]
+        },
+        "Continue": true
+    }
+]
 ```
 
 ### Example 3: Using GpioNum Instead of LineName
@@ -481,21 +518,19 @@ A production configuration monitoring power, reset, intrusion, and fan presence.
 If your device tree does not define `gpio-line-names`, you can fall back to specifying the GPIO chip and offset directly. This approach is less portable but works on any platform.
 
 ```json
-{
-    "GpioConfigs": [
-        {
-            "Name": "PowerButton",
-            "LineName": "",
-            "GpioNum": 8,
-            "ChipId": "/dev/gpiochip0",
-            "EventMon": "FALLING",
-            "Targets": {
-                "0": ["obmc-chassis-hard-poweroff@0.target"]
-            },
-            "Continue": false
-        }
-    ]
-}
+[
+    {
+        "Name": "PowerButton",
+        "LineName": "",
+        "GpioNum": 8,
+        "ChipId": "/dev/gpiochip0",
+        "EventMon": "FALLING",
+        "Targets": {
+            "FALLING": ["obmc-chassis-hard-poweroff@0.target"]
+        },
+        "Continue": false
+    }
+]
 ```
 
 {: .warning }

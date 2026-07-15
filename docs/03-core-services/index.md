@@ -40,6 +40,8 @@ Monitor hardware health through temperature, voltage, current, and fan sensors.
 | [GPIO Management]({% link docs/03-core-services/14-gpio-management-guide.md %}) | GPIO monitoring, phosphor-gpio-monitor |
 | [PECI Thermal Monitoring]({% link docs/03-core-services/15-peci-thermal-monitoring-guide.md %}) | CPU temperature via PECI interface |
 | [I2C Device Integration]({% link docs/03-core-services/16-i2c-device-integration-guide.md %}) | I2C device trees, tools, custom drivers |
+| [Leak Detection]({% link docs/03-core-services/21-leak-detection-guide.md %}) | Liquid-cooling leak sensors, shutdown orchestration |
+| [NVIDIA GPU Management]({% link docs/03-core-services/22-nvidia-gpu-management-guide.md %}) | GPU/PCIe/SMA telemetry and control over MCTP |
 
 ### Thermal & Power
 

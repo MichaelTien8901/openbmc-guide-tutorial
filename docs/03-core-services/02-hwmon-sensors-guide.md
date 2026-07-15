@@ -499,6 +499,68 @@ For fan tachometer and PWM monitoring.
 }
 ```
 
+### Fan Redundancy and Presence
+
+The `fansensor` daemon does more than publish tach RPM — it can also track **fan
+redundancy** (are enough fans healthy?) and **fan presence** (is the fan physically
+installed?).
+
+#### Redundancy
+
+An `xyz.openbmc_project.Configuration.FanRedundancy` entry declares how many fans may
+fail before the group is no longer redundant. The daemon exposes an
+`xyz.openbmc_project.Control.FanRedundancy` interface at
+`/xyz/openbmc_project/control/FanRedundancy/Tach`, whose `Status` property reports one
+of three states:
+
+| Status | Meaning |
+|--------|---------|
+| `Full` | Every fan in the collection is healthy |
+| `Degraded` | Some fans failed, but still within `AllowedFailures` |
+| `Failed` | More fans failed than `AllowedFailures` permits |
+
+Crossing out of and back into `Full` logs the Redfish messages
+`OpenBMC.0.1.FanRedundancyLost` and `OpenBMC.0.1.FanRedundancyRegained`.
+
+```bash
+busctl get-property xyz.openbmc_project.FanSensor \
+    /xyz/openbmc_project/control/FanRedundancy/Tach \
+    xyz.openbmc_project.Control.FanRedundancy Status
+# s "Full"
+```
+
+#### Presence GPIO
+
+A fan's config can carry a `Presence` sub-object so the daemon knows whether the fan is
+installed. The `MonitorType` field selects one of two strategies:
+
+| `MonitorType` | Class | Behavior |
+|---------------|-------|----------|
+| `Event` (default) | `EventPresenceGpio` | Reacts to GPIO edge events (interrupt-driven) |
+| `Polling` | `PollingPresenceGpio` | Samples the GPIO line on a timer |
+
+```json
+{
+    "Connector": {
+        "Name": "Fan0",
+        "Pwm": 0,
+        "Tachs": [0]
+    },
+    "Presence": {
+        "MonitorType": "Event",
+        "PinName": "FAN0_PRESENCE",
+        "Polarity": "Low"
+    },
+    "Name": "Fan0",
+    "Type": "AspeedFan"
+}
+```
+
+`Polarity` is `"Low"` when the line reads low while the fan is present (inverted), or
+`"High"` otherwise. When a fan is reported absent, its tach sensor is treated as
+not-present rather than as a failed fan, which keeps a deliberately empty fan slot from
+tripping the redundancy logic.
+
 ---
 
 ## Kernel Driver Configuration

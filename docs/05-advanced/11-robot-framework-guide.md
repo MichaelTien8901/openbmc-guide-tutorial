@@ -336,6 +336,107 @@ robot -L DEBUG test_suite.robot
 robot -L TRACE test_suite.robot
 ```
 
+### Argument Files (test_lists/)
+
+Passing long lists of suites, tags, and variables on the command line gets unwieldy, so the repository ships **Robot argument files** in the `test_lists/` directory. Each file is a curated set of `robot` arguments for one scenario:
+
+| Argument file | Purpose |
+|---------------|---------|
+| `HW_CI` | Suites safe to run against real hardware in CI |
+| `CT_basic_run` | A basic continuous-test smoke run |
+| `QEMU_CI` | Suites suitable for QEMU-based CI |
+| `skip_test_witherspoon`, `skip_test_palmetto` | Platform-specific skip lists |
+
+Point `robot` at one with `--argumentfile`:
+
+```bash
+robot --argumentfile test_lists/HW_CI \
+      -v OPENBMC_HOST:192.168.1.100 \
+      -v OPENBMC_USERNAME:root \
+      -v OPENBMC_PASSWORD:0penBmc \
+      redfish/
+```
+
+You can supply `--argumentfile` more than once -- for example, combine a run list with a platform skip list to exclude tests that do not apply to your board.
+
+---
+
+## First Failure Data Capture (FFDC)
+
+When a test fails you usually need the BMC's logs and state *from the moment of failure* to debug it. `openbmc-test-automation` automates this with **First Failure Data Capture (FFDC)**: on a failed test, a teardown keyword collects logs, journals, dumps, and inventory from the target and saves them alongside the Robot results.
+
+### Collection Plugins
+
+FFDC data is gathered by protocol plugins in `ffdc/plugins/`, each of which knows how to pull data over one transport:
+
+| Plugin | Transport | Typical use |
+|--------|-----------|-------------|
+| `ssh_execution.py` | SSH | Run commands on the BMC and capture stdout |
+| `scp_execution.py` | SCP | Copy log files and dumps off the BMC |
+| `telnet_execution.py` | Telnet | Collect data over serial/console-style access |
+| `redfish.py` | Redfish | Walk and dump the Redfish resource tree |
+
+The `redfish.py` plugin uses **`redfishtool`** to recursively enumerate the service: `enumerate_request()` issues `GET` requests and `walk_nested_dict()` follows every `@odata.id` and `Members` link, producing a full JSON snapshot of the tree.
+
+### Wiring FFDC Into a Suite
+
+FFDC runs from teardown keywords so it fires automatically on failure. The Robot glue lives in `lib/openbmc_ffdc.robot`, and `lib/ffdc_cli_robot_script.py` drives the plugin-based collector:
+
+```robot
+*** Settings ***
+Resource          ../lib/openbmc_ffdc.robot
+Test Teardown     FFDC On Test Case Fail
+
+*** Test Cases ***
+Power On Host
+    [Documentation]    Power on and capture FFDC if the test fails.
+    [Tags]    power
+    Redfish Power On
+    Wait Until Keyword Succeeds    3 min    10 sec    Is Host Running
+```
+
+If `Power On Host` fails, `FFDC On Test Case Fail` collects logs through the plugins above before the suite moves on.
+
+### Plug-in Package Framework
+
+{: .note }
+> FFDC's collectors are one use of a more general **plug-in package framework**. `bin/process_plug_in_packages.py` discovers and runs plug-in packages, invoking their *call-point* programs (scripts run at defined points in the test flow, such as setup, cleanup, or FFDC collection), and `bin/validate_plug_ins.py` checks that a package is well-formed. Reusable plug-in packages ship under `bin/plug_ins/`. This lets you extend a run with custom setup, teardown, or data-collection logic without modifying the test suites themselves.
+
+---
+
+## GUI Test Automation
+
+Beyond API-level tests, `openbmc-test-automation` drives the OpenBMC web UI end-to-end in a real browser using **SeleniumLibrary**.
+
+### Test Layout
+
+The current GUI suites target the Vue-based **webui-vue** front end and live under `gui/gui_test/`, organized by menu (for example `gui/gui_test/operations_menu/` and `gui/gui_test/settings_menu/`). Earlier AngularJS-era GUI tests (for the legacy `phosphor-webui`) have largely been retired as the web UI moved to Vue.
+
+### Locators
+
+Rather than scattering XPaths through the tests, element locators are centralized under `gui/data/`:
+
+| File | Contents |
+|------|----------|
+| `gui/data/gui_variables.py` | XPath and string constants for the Vue GUI |
+| `gui/data/resource_variables.py` | Shared resource locators and identifiers |
+
+Tests prefer stable **`data-test-id`** attributes rendered by webui-vue, so locators survive cosmetic markup changes.
+
+### Running GUI Tests
+
+GUI tests need a Selenium-driven browser and a matching WebDriver (for example ChromeDriver). Setup steps are documented in `docs/gui_setup_reference.md`. A run looks like:
+
+```bash
+robot -v OPENBMC_HOST:${OPENBMC_HOST} \
+      -v OPENBMC_USERNAME:root \
+      -v OPENBMC_PASSWORD:0penBmc \
+      gui/gui_test/
+```
+
+{: .note }
+> GUI tests are browser- and timing-sensitive, so they run slower and break more easily than Redfish or IPMI tests. Keep them out of fast smoke runs and gate them behind their own tags or argument file.
+
 ---
 
 ## Common Test Patterns
@@ -386,6 +487,9 @@ Patch System Asset Tag
 
     Should Be Equal As Integers    ${resp.status_code}    200
 ```
+
+{: .note }
+> **Under the hood: `bmc_redfish` and mTLS.** The higher-level Redfish keywords in the suite are backed by `lib/bmc_redfish.py`, whose `bmc_redfish` class extends `redfish_plus` (a thin wrapper over the DMTF `redfish` Python library). Its `enumerate()` keyword recursively walks the service (via `walk_nested_dict()`) to snapshot the whole tree. For mutual-TLS testing, set `MTLS_ENABLED=True` so the client authenticates with a certificate instead of a session token, together with `VALID_CERT` and `CERT_DIR_PATH` (defined in `lib/redfish_plus.py` and `lib/resource.robot`). See `docs/redfish_request_via_mTLS.md` for the full mTLS setup.
 
 ### IPMI Command Test
 

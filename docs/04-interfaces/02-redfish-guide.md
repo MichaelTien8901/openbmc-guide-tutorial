@@ -96,6 +96,9 @@ flowchart TB
 
 ## Setup & Configuration
 
+{: .note }
+> bmcweb's web server serves responses over both **HTTP/1.1 and HTTP/2** on the same HTTPS listener. When a client advertises HTTP/2 during the TLS handshake (via ALPN), bmcweb uses it; otherwise the connection falls back to HTTP/1.1. Both run on the standard HTTPS port, so no extra configuration is needed to accept either -- the examples in this guide work unchanged regardless of which the client negotiates.
+
 ### Build-Time Configuration (Yocto)
 
 Configure bmcweb features in your build:

@@ -1164,6 +1164,19 @@ pldmtool platform getEventMessageBufferSize -m 9
 
 ---
 
+## Host-BMC PLDM Coordination
+
+On platforms where the host runs its own PLDM stack, `pldmd` coordinates state
+and inventory with it:
+
+- **PDR exchange** — `HostPDRHandler` issues `GetPDR` when the host powers on, folds the host's entity-association PDRs into the BMC entity tree, and creates D-Bus inventory objects (for example `xyz.openbmc_project.Inventory.Item.CpuCore`) through `CustomDBus`.
+- **Event forwarding** — `DbusToPLDMEvent` converts D-Bus state-sensor `PropertiesChanged` signals into PLDM `PlatformEventMessage`s sent to the host.
+- **Graceful shutdown** — `pldmSoftPowerOff.service` (`SoftPowerOff`) reads `softoff_config.json` (TID / entity type / state-set ID), sends `SetStateEffecterStates`, then waits for the host's PLDM state-sensor event with a timeout before a hard power-off.
+
+(Verify class/service names against your `pldm` version.)
+
+---
+
 ## D-Bus Interfaces
 
 ### MCTP D-Bus Objects
@@ -1404,6 +1417,17 @@ Working examples are available in the [examples/mctp-pldm](https://github.com/Mi
 - `config/static-endpoints.json` - Static MCTP endpoint configuration
 - `config/pdr.json` - PDR repository definition
 - `config/pldm-dbus.conf` - D-Bus access policy for PLDM
+
+---
+
+{: .note }
+The `pldm` repo carries vendor OEM extensions under `oem/`, conditionally compiled
+per platform: **IBM** (DMA-based file I/O for PELs / LIDs / dumps / certificates,
+in-band code update, PCIe-slot VPD, host lamp test), **Ampere** (CPER and
+sensor-event decoding to SEL/Redfish), **Meta** (system / BIOS-SEL / memory /
+POST-error decoding, power-control file I/O), and **NVIDIA**. When porting to one
+of these platforms, enable the matching `oem` build option. (Verify against your
+`pldm` version.)
 
 ---
 

@@ -446,6 +446,188 @@ busctl set-property xyz.openbmc_project.ExternalSensor \
     xyz.openbmc_project.Sensor.Value Value d 450.5
 ```
 
+{: .note }
+The `externalsensor` daemon can enforce **staleness** on a writable sensor. Add a
+`Timeout` (in seconds) to the Entity Manager entry: if no new value is written within
+that window, the daemon's reaper (`updateReaper`) invalidates the sensor and publishes
+`NaN` on `Value`, so a stalled producer surfaces as "unavailable" instead of a stuck
+last-known reading. A `Timeout` of `0` (or an omitted key) makes the sensor
+non-perishable — it keeps its last written value indefinitely.
+
+```json
+{
+    "Name": "Total Power",
+    "Type": "ExternalSensor",
+    "Units": "Watts",
+    "Timeout": 5,
+    "MinValue": 0,
+    "MaxValue": 2000
+}
+```
+
+---
+
+## SMBPBI Sensors
+
+The `smbpbi` daemon (service `xyz.openbmc_project.SMBPBI`) reads telemetry from a
+management controller — typically an NVIDIA HMC/GPU — that exposes an **SMBus Post-Box
+Interface (SMBPBI)** "virtual EEPROM" over I2C. Each Entity Manager entry of type
+`SmbpbiVirtualEeprom` maps a byte offset in that virtual EEPROM to one D-Bus sensor.
+
+```json
+{
+    "Exposes": [
+        {
+            "Name": "GPU0 Temp",
+            "Type": "SmbpbiVirtualEeprom",
+            "Bus": 3,
+            "Address": "0x4f",
+            "ReadOffset": 0,
+            "Units": "DegreesC",
+            "ValueType": "UINT64",
+            "PollRate": 1.0,
+            "MinValue": 0,
+            "MaxValue": 128
+        }
+    ],
+    "Name": "GPU Board",
+    "Type": "Board"
+}
+```
+
+The daemon issues a raw `I2C_RDWR` transfer to read the block at `ReadOffset`, then
+decodes it according to `Units`: `convert2Temp` for `DegreesC`, `convert2Power` for
+`Watts`, plus direct handling for `Joules` (energy) and `Volts` (voltage). The `Units`
+value picks both the decode routine and the D-Bus object path
+(`/xyz/openbmc_project/sensors/{temperature,power,energy,voltage}/…`).
+
+{: .note }
+When the management controller has not yet published a value, the SMBPBI block reads
+back as all `0xFF`. The daemon treats that as "no data" and publishes `NaN` rather than
+a bogus reading, so a consumer can tell a genuine zero from an absent one.
+
+---
+
+## Cable Monitoring
+
+The `cable-monitor` daemon (service `xyz.openbmc_project.cablemonitor`) tracks whether
+the cables a platform expects are actually present and raises Redfish events when one is
+plugged or unplugged. Unlike the register-reading sensor daemons, it does not touch
+hardware — it watches the **inventory** on D-Bus and compares it against a configured
+expected list.
+
+The expected cables come from a JSON file at
+`/var/lib/cablemonitor/cable-config.json` with a `ConnectedCables` array of cable names:
+
+```json
+{
+    "ConnectedCables": [
+        "PCIe_Cable_0",
+        "PCIe_Cable_1"
+    ]
+}
+```
+
+At runtime the daemon subscribes to inventory objects that implement
+`xyz.openbmc_project.Inventory.Item.Cable` (published by Entity Manager) and reacts to
+their `InterfacesAdded` / `InterfacesRemoved` signals; it also watches the config file
+with inotify so an updated list is picked up without a restart. When an expected cable's
+inventory object appears it logs a `CableConnected` event, and when one disappears it
+logs `CableDisconnected` (both in the `xyz.openbmc_project.State.Cable` namespace, routed
+through phosphor-logging to the Redfish event log).
+
+```bash
+# Watch cable connect/disconnect events
+journalctl -u xyz.openbmc_project.cablemonitor -f
+```
+
+---
+
+## IPMB Sensors
+
+The `ipmbsensor` daemon (service `xyz.openbmc_project.IpmbSensor`) reads sensors that
+live behind an **IPMB** (Intelligent Platform Management Bus) satellite controller — a
+BMC, ME (management engine), or voltage-regulator bridge — instead of on a local I2C
+bus. It does not talk to the bus directly; it sends IPMI requests through the
+`org.openbmc.Ipmb` D-Bus service (`/xyz/openbmc_project/Ipmi/Channel/Ipmb`,
+`sendRequest` method), which an IPMB transport daemon relays onto the wire.
+
+Each Entity Manager entry of type `IpmbSensor` names a bridge `Class` and a
+`SensorType`:
+
+```json
+{
+    "Exposes": [
+        {
+            "Name": "MB Temp",
+            "Type": "IpmbSensor",
+            "Class": "METemp",
+            "SensorType": "temperature",
+            "Address": "0x2e",
+            "Bus": 0,
+            "HostSMbusIndex": 3,
+            "PollRate": 1.0
+        }
+    ],
+    "Name": "IPMB Board",
+    "Type": "Board"
+}
+```
+
+| Field | Purpose |
+|-------|---------|
+| `Class` | Bridge/reading protocol: `METemp`/`MESensor`, `PxeBridgeTemp`, `IRBridgeTemp`, `HSCBridge`, `MpsBridgeTemp`, `SMPro` |
+| `SensorType` | Reading subtype: `temperature` (default), `voltage`, `power`, `current`, `utilization` |
+| `Address` | IPMB device (satellite) address |
+| `HostSMbusIndex` | SMBus index passed in bridged VR commands |
+
+### SDR Auto-Discovery (IpmbSDRDevice)
+
+Beyond the statically declared sensors above, the daemon can enumerate a satellite's
+sensors automatically by reading its **SDR (Sensor Data Record) repository**. The
+`IpmbSDRDevice` class walks the repository — Get SDR Repository Info, Reserve SDR
+Repository, then repeated Get SDR — and for every **Type-01 (Full Sensor Record)** entry
+it parses the sensor name, unit, conversion factors, and thresholds, then creates a
+matching D-Bus sensor. This lets a platform pick up all of a satellite BMC's sensors
+without listing each one in Entity Manager.
+
+---
+
+## MCU Temperature and NVMe Sensors
+
+### MCU Temperature (mcutempsensor)
+
+The `mcutempsensor` daemon (service `xyz.openbmc_project.MCUTempSensor`) reads a
+temperature value from a microcontroller register over I2C. The Entity Manager entry
+(type `MCUTempSensor`) gives the `Bus`, `Address`, and the register offset in `Reg`; the
+daemon opens `/dev/i2c-<Bus>` and issues an SMBus read-word at that register.
+
+```json
+{
+    "Exposes": [
+        {
+            "Name": "MCU Temp",
+            "Type": "MCUTempSensor",
+            "Class": "MCUTempSensor",
+            "Bus": 5,
+            "Address": "0x50",
+            "Reg": 4
+        }
+    ],
+    "Name": "MCU Board",
+    "Type": "Board"
+}
+```
+
+### NVMe (nvmesensor)
+
+The `nvmesensor` daemon (service `xyz.openbmc_project.NVMeSensor`, config type
+`NVME1000`) reads drive temperature over **NVMe-MI** using the Basic Management Command
+on the drive's SMBus/I2C interface. Drives usually sit behind an I2C mux, so the daemon
+derives the **root bus** from the mux device's `/mux_device` symlink and shares one
+context per root bus. Each basic-management query runs on a dedicated worker thread so a
+slow or unresponsive drive cannot stall the daemon's main event loop.
+
 ---
 
 ## Threshold Configuration

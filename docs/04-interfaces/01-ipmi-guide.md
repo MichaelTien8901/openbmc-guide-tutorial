@@ -29,6 +29,7 @@ Implement and extend IPMI functionality in OpenBMC.
 
 - **ipmid**: The main IPMI daemon
 - **Host IPMI**: KCS/BT interface to the host
+- **Host IPMI over SSIF**: SMBus System Interface — a third host transport, bridged by `ssifbridge`
 - **Network IPMI**: RMCP/RMCP+ over LAN
 
 ```mermaid
@@ -616,6 +617,64 @@ systemctl status phosphor-ipmi-host
 
 # View host IPMI messages
 journalctl -u phosphor-ipmi-host -f
+```
+
+---
+
+## Host IPMI over SSIF
+
+**SSIF** (SMBus System Interface) is a third host-side IPMI transport, alongside
+KCS and BT. Where KCS and BT ride the LPC bus, SSIF carries IPMI messages over an
+SMBus/I2C link between the host and the BMC — useful on platforms that expose the
+BMC as an SMBus slave rather than through an LPC KCS/BT channel.
+
+On OpenBMC this transport is handled by **ssifbridge** (the `ssifbridged` daemon),
+which sits between the kernel SSIF host device and the same IPMI command dispatch
+that `ipmid` serves:
+
+- It reads inbound IPMI requests from the SSIF character device
+  `/dev/ipmi-ssif-host`.
+- For each request it forwards the NetFn, LUN, and Command (plus data) to the
+  `execute` method of the `xyz.openbmc_project.Ipmi.Server` interface, on the
+  service `xyz.openbmc_project.Ipmi.Host`. This is the same command-handler
+  dispatch that KCS and BT feed, so your provider libraries and OEM handlers
+  work unchanged (see [ipmid Architecture](#ipmid-architecture)).
+- When the D-Bus reply returns, the bridge translates the response (completion
+  code plus data) back into an SSIF response and writes it to the device.
+
+### Get System Interface Capabilities
+
+One command is answered **directly by the bridge** rather than being forwarded to
+`ipmid`: **Get System Interface Capabilities** (NetFn `0x06`, Cmd `0x57`). The
+bridge reports the SSIF interface type and the maximum transmit/receive message
+sizes it supports, so the host learns how to frame subsequent SSIF traffic before
+any command reaches the D-Bus dispatch.
+
+### Response Timer
+
+Because an SMBus master will not wait indefinitely for a slow slave, ssifbridge
+arms a **response timer** when it forwards a request. If the D-Bus reply has not
+arrived by the time the timer expires, the bridge returns a response with
+completion code **`0xce`** ("Command response could not be provided") so the SSIF
+transaction can still complete. A real (late) D-Bus reply that arrives afterward
+is dropped, so the host never sees a duplicate response for the same request.
+
+{: .note }
+> Because SSIF ultimately reaches the same `xyz.openbmc_project.Ipmi.Server`
+> dispatch as KCS and BT, command handlers, privileges, and OEM providers behave
+> identically across all three host transports.
+
+### Runtime Status
+
+```bash
+# Check the SSIF bridge service
+systemctl status ssifbridge
+
+# Follow bridge activity (forwarding, capability replies, timeouts)
+journalctl -u ssifbridge -f
+
+# Confirm the SSIF host character device is present
+ls -l /dev/ipmi-ssif-host
 ```
 
 ---
